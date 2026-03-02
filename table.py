@@ -17,7 +17,14 @@ class Table:
 
     def get_column(self, name: str) -> Column:
         return self.columns[name]
-
+    
+    def get_rows(self, indexes: list) -> list[dict]:
+        """Return rows as a list of dicts for the given indexes."""
+        return [
+            {col_name: col.data[i] for col_name, col in self.columns.items()}
+            for i in indexes
+        ]
+    
     def save(self, directory: str):
         for column in self.columns.values():
             column.save(directory)

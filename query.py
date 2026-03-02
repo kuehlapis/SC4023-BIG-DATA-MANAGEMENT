@@ -8,7 +8,7 @@ class Query:
         self.indexes = list(range(len(next(iter(table.columns.values())).data)))
         self._selected_indexes = self.indexes
 
-    def select(self, indexes=None):
+    def select(self, indexes=None) -> list[int]:
         """Return values from selected indexes. Optionally pass a subset of indexes."""
         if indexes is not None:
             self._selected_indexes = [i for i in indexes if i in self._selected_indexes]
@@ -20,12 +20,29 @@ class Query:
         self._selected_indexes = [i for i in self._selected_indexes if predicate(col.data[i])]
         return self
 
-    def aggregate(self, func: str, column: str):
-        """e.g. query.aggregate('sum', 'price')"""
-        self._agg_func = func
-        self._agg_col = column
-        return self
+    def fetch(self) -> list[dict]:
+        """Retrieve actual values for the current selected indexes."""
+        return self.table.get_rows(self._selected_indexes)
+    
+    
+    def aggregate(self, column: str, func: str) -> int:
+        """Aggregate values from selected indexes only."""
+        col = self.table.get_column(column)
+        data = [col.data[i] for i in self._selected_indexes]
 
+        ops = {
+            "max":   max(data),
+            "min":   min(data),
+            "sum":   sum(data),
+            "avg":   sum(data) / len(data),
+            "count": len(data),
+        }
+        return ops[func]
+    
+    def reset(self):
+        self._selected_indexes = self.indexes
+    
+    """
     def execute(self):
         # Aggregation path
         if self._agg_func:
@@ -53,7 +70,4 @@ class Query:
         # Zip columns back into rows for output
         return [dict(zip(cols, row)) for row in zip(*[scanned[c] for c in cols])]
 
-    def fetch(self, column: str):
-        """Retrieve actual values for the current selected indexes from a column."""
-        col = self.table.get_column(column)
-        return [col.data[i] for i in self._selected_indexes]
+    """
