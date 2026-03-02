@@ -39,74 +39,80 @@ class ColumnFormat(BaseFormat):
 
         print(f"[ColumnFormat] Wrote {len(units)} columns → '{db_path}'")
 
-    def read_units(self, db_path: str, schema: Dict[str, type]) -> Dict[str, StorageModel]:
-        """
-        Load all columns from disk using schema.
-        Returns {column_name: Column()}
-        """
-        units: Dict[str, StorageModel] = {}
+    def query_column(self, col_name):
+        """Reads only the necessary column file."""
+        file_path = os.path.join("Database", f"{col_name}.col")
+        if os.path.exists(file_path):
+            with open(file_path, "r") as f:
+                return [line.strip() for line in f]
+        return []
+    
+    def write_month_num(self):
+        """Reads 'month.col' (MMM-YY format) and writes a new 'month_num.col' in YYYYMM format.
+        e.g. 'Jan-15' → '201501'"""
+        
+        month_map = {
+            "Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04",
+            "May": "05", "Jun": "06", "Jul": "07", "Aug": "08",
+            "Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12"
+        }
+        
+        raw = self.query_column("month")
+        if not raw:
+            print("Error: 'month.col' not found or is empty.")
+            return
+        
+        month_nums = []
+        for row in raw:
+            try:
+                mmm, yy = row.split("-")
+                yyyy = f"20{yy}"
+                mm = month_map[mmm]
+                month_nums.append(f"{yyyy}{mm}")
+            except (ValueError, KeyError):
+                print(f"Warning: Skipping unrecognised row '{row}'")
+                month_nums.append("")
 
-        for name, dtype in schema.items():
-            path = os.path.join(db_path, f"{name}.col")
-            if not os.path.exists(path):
-                raise FileNotFoundError(f"Missing column file: {path}")
+        target_path = os.path.join("Database", "month_num.col")
+        with open(target_path, "w") as f:
+            f.write("\n".join(month_nums) + "\n")
+        print(f"Written {len(month_nums)} rows to 'month_num.col'")
 
-            col = Column(name, dtype)
+    def write_psm_price(self):
+        """Calculates price per square metre (PSM) from resale_price and floor_area_sqm columns,
+        and writes the result to 'psm_price.col'."""
+        
+        prices = self.query_column("resale_price")
+        areas = self.query_column("floor_area_sqm")
+        
+        if not prices or not areas:
+            print("Error: 'resale_price.col' or 'floor_area_sqm.col' not found or is empty.")
+            return
+        
+        if len(prices) != len(areas):
+            print("Error: Column lengths do not match.")
+            return
+        
+        psm_prices = []
+        for price, area in zip(prices, areas):
+            try:
+                psm = float(price) / float(area)
+                psm_prices.append(f"{psm:.2f}")
+            except (ValueError, ZeroDivisionError):
+                print(f"Warning: Skipping invalid row (price='{price}', area='{area}')")
+                psm_prices.append("")
 
-            with open(path, "r", encoding="utf-8") as f:
-                for line in f:
-                    value = line.strip()
-                    if value != "":
-                        try:
-                            col.append(dtype(value))
-                        except Exception:
-                            col.append(value)
+        target_path = os.path.join("Database", "psm_price.col")
+        with open(target_path, "w") as f:
+            f.write("\n".join(psm_prices) + "\n")
+        print(f"Written {len(psm_prices)} rows to 'psm_price.col'")
 
-            units[name] = col
-
-        print(f"[ColumnFormat] Loaded {len(units)} columns from '{db_path}'")
-        return units
-
-    def read_column(self, db_path: str, column_name: str) -> list:
-        path = os.path.join(db_path, f"{column_name}.col")
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"Column file not found: {path}")
-
-        with open(path, "r", encoding="utf-8") as f:
-            data = [line.strip() for line in f if line.strip() != ""]
-
-        print(f"[ColumnFormat] Read column '{column_name}' ({len(data)} rows)")
-        return data
-
-    def read_row(self, db_path: str, row_index: int) -> dict:
-        """Column-store row access — O(num_columns)."""
-        row = {}
-
-        for file in os.listdir(db_path):
-            if file.endswith(".col"):
-                col_name = file[:-4]
-                path = os.path.join(db_path, file)
-
-                with open(path, "r", encoding="utf-8") as f:
-                    for i, line in enumerate(f):
-                        if i == row_index:
-                            row[col_name] = line.strip()
-                            break
-                    else:
-                        raise IndexError(f"Row index {row_index} out of range for column '{col_name}'")
-
-        return row
-
-    def read_head(self, db_path: str) -> Dict[str, list]:
-        if not os.path.exists(db_path):
-            raise FileNotFoundError(f"Database directory not found: {db_path}")
-
-        column_data = {}
-
-        for file in sorted(os.listdir(db_path)):
-            if file.endswith(".col"):
-                col_name = file[:-4]
-                column_data[col_name] = self.read_column(db_path, col_name)
-
-        print(f"[ColumnFormat] read_head loaded {len(column_data)} columns from '{db_path}'")
-        return column_data
+if __name__ == "__main__":
+    db = ColumnFormat()
+    #db.write_batch()
+    
+    # Example: Grab just the resale prices
+    #prices = db.query_column("resale_price")
+    #print(f"Loaded {len(prices)} price points.")
+    #db.write_month_num()
+    db.write_psm_price()
