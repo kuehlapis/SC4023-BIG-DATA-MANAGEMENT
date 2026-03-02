@@ -1,93 +1,66 @@
-from abc import ABC, abstractmethod
-from typing import Any, Callable
+# query.py
+
 from model.TableModel import Table
 
-
-class QueryModel(ABC):
-    """Abstract base query interface. Subclass for column or row oriented queries."""
-
+class Query:
     def __init__(self, table: Table):
         self.table = table
-        self._n: int = table.row_count()
+        
+        # all row indexes
+        self.indexes = list(range(len(next(iter(table.storage_units.values())).data)))
+        self._selected_indexes = self.indexes.copy()
 
-    @abstractmethod
-    def reset(self) -> "QueryModel":
-        pass
+        # query state
+        self._agg_func = None
+        self._agg_col = None
+        self._columns = None   # selected columns
 
-    @abstractmethod
-    def count(self) -> int:
-        pass
+    def select(self, indexes=None):
+        """Return values from selected indexes. Optionally pass a subset of indexes."""
+        if indexes is not None:
+            self._selected_indexes = [i for i in indexes if i in self._selected_indexes]
+        return self._selected_indexes
 
-    @abstractmethod
-    def where(self, field: str, predicate: Callable) -> "QueryModel":
-        pass
 
-    @abstractmethod
-    def where_in(self, field: str, values: set) -> "QueryModel":
-        pass
+    def where(self, column: str, predicate):
+        """Filter indexes based on predicate on a column."""
+        col = self.table.get_unit(column)
+        self._selected_indexes = [
+            i for i in self._selected_indexes
+            if predicate(col.data[i])
+        ]
+        return self
 
-    @abstractmethod
-    def where_multi(self, predicates: dict[str, Callable]) -> "QueryModel":
-        pass
+    def aggregate(self, func: str, column: str):
+        """e.g. query.aggregate('sum', 'price')"""
+        self._agg_func = func
+        self._agg_col = column
+        return self
 
-    @abstractmethod
-    def filter_towns(self, valid_towns: set[str]) -> "QueryModel":
-        pass
+    def execute(self):
+        # -------- Aggregation path --------
+        if self._agg_func:
+            col = self.table.get_unit(self._agg_col)
+            return {
+                self._agg_func: col.aggregate(self._agg_func, self._selected_indexes)
+            }
 
-    @abstractmethod
-    def filter_months(self, valid_months: set[tuple[int, int]]) -> "QueryModel":
-        pass
+        # -------- Scan path --------
+        cols = self._columns or list(self.table.storage_units.keys())
 
-    @abstractmethod
-    def filter_min_area(self, min_sqm: float) -> "QueryModel":
-        pass
+        # column-oriented scan
+        scanned = {
+            c: self.table.get_unit(c).scan(self._selected_indexes)
+            for c in cols
+        }
 
-    @abstractmethod
-    def fetch(self, field: str) -> list:
-        pass
+        # zip columns -> rows
+        return [
+            dict(zip(cols, row))
+            for row in zip(*[scanned[c] for c in cols])
+        ]
 
-    @abstractmethod
-    def fetch_rows(self, fields: list[str] = None) -> list[dict]:
-        pass
-
-    @abstractmethod
-    def fetch_computed(self, field: str, transform: Callable) -> list:
-        pass
-
-    @abstractmethod
-    def aggregate(self, func: str, field: str):
-        pass
-
-    @abstractmethod
-    def price_per_sqm(self, i: int) -> float:
-        pass
-
-    @abstractmethod
-    def min_by_psm(self) -> tuple[int | None, float]:
-        pass
-
-    @abstractmethod
-    def best_row_for_xy(
-        self,
-        x: int,
-        y: float,
-        valid_towns: set[str],
-        valid_months: set[tuple[int, int]],
-        max_psm: float,
-    ) -> int | None:
-        pass
-
-    @abstractmethod
-    def scan_all_pairs(
-        self,
-        valid_towns: set[str],
-        valid_months_for: Callable[[int], set[tuple[int, int]]],
-        x_range: range,
-        y_range: range,
-        max_psm: float,
-    ) -> list[dict[str, Any]]:
-        pass
-
-    @abstractmethod
-    def execute(self) -> list[dict]:
-        pass
+    def fetch(self, column: str):
+        """Retrieve actual values for current selected indexes from a column."""
+        col = self.table.get_unit(column)
+        return col.scan(self._selected_indexes)

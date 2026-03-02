@@ -1,10 +1,10 @@
 from model.DatabaseModel import DatabaseModel
 from model.TableModel import Table
-from model.query.ColQuery import Query
 from utils.column_format import ColumnFormat
 from view.DatabaseView import DatabaseView
 from utils.conditions import Condition
 from utils.helpers import _parse_month, _safe_float, parse_int
+from model.QueryModel import Query
 import time
 
 
@@ -55,52 +55,21 @@ class DatabaseController:
 
         self.db_view.display_databases(databases)
         db_name = self.db_view.prompt_user("\nEnter database name")
-        matric_num = self.db_view.prompt_user("\nEnter matric number")
+        # matric_num = self.db_view.prompt_user("\nEnter matric number")
 
         db_model = DatabaseModel(db_name)
         engine = db_model.get_engine()
         table = Table(engine, name=db_name)
-        table.load(db_model.get_path())
-        condition =  Condition()
-        
-        valid_towns = set(t.upper() for t in condition.towns_from_matric(matric_num))
-        target_year = condition.target_year_from_matric(matric_num)
-        start_month = condition.start_month_from_matric(matric_num)
-
-        def valid_months_for(x: int) -> set[tuple[int, int]]:
-            return set(condition.build_time_window(target_year, start_month, x))
-
+        table.load(db_model.get_path()) 
         q = Query(table)
-        results = q.scan_all_pairs(
-            valid_towns=valid_towns,
-            valid_months_for=valid_months_for,
-            x_range=range(1, 9),
-            y_range=range(80, 151),
-            max_psm=4725.0,
-        )
 
-        matched = [r for r in results if r["row_index"] is not None]
-        end = time.time()
-        self.db_view.display_success(f"Query completed in {end - start:.2f} seconds.")
-        print(f"\nTotal (x,y) pairs scanned : {len(results)}")
-        print(f"Pairs with a valid match  : {len(matched)}")
+        condition = Condition()
+
+        amk_count = q.where("town", lambda x: x == "ANG MO KIO").select()
+        print(f"Flats in ANG MO KIO: {len(amk_count)}")
+        load_end = time.time()
+        
+        print(f"\nDatabase '{db_name}' loaded in {load_end - start:.2f} seconds.")
 
 
-        display_fields = ["month", "town", "block", "floor_area_sqm", "flat_model", "lease_commence_date"]
-        col_data = {f: table.get_unit(f).scan() for f in display_fields}
-
-        for r in matched:
-            idx = r["row_index"]
-            month_raw = col_data["month"][idx]
-            year, _ = _parse_month(month_raw)
-
-            print(
-                f"  x={r['x']:>2}, y={r['y']:>3} "
-                f"  year={year} "
-                f"→ town={col_data['town'][idx]:<20} "
-                f"block={col_data['block'][idx]:<10} "
-                f"floor_area={col_data['floor_area_sqm'][idx]:>6} "
-                f"model={col_data['flat_model'][idx]:<15} "
-                f"lease={col_data['lease_commence_date'][idx]} "
-                f"psm={r['psm']:.2f}"
-            )
+        

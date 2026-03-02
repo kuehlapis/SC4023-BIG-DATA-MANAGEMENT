@@ -1,5 +1,6 @@
-from abc import ABC, abstractmethod
+# model/StorageModel.py
 
+from abc import ABC, abstractmethod
 
 class StorageModel(ABC):
     """Abstract base for a single storage unit (Column or Row)."""
@@ -15,4 +16,3 @@ class StorageModel(ABC):
     @abstractmethod
     def aggregate(self, func: str, indexes: list = None):
         pass
-

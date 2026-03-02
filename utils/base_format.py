@@ -7,7 +7,6 @@ from model.StorageModel import StorageModel
 class BaseFormat(ABC):
     """
     Abstract storage engine.
-    Subclass this for Column-oriented, Row-oriented, etc.
     """
 
     @abstractmethod
@@ -18,6 +17,11 @@ class BaseFormat(ABC):
     @abstractmethod
     def write_units(self, units: Dict[str, StorageModel], db_path: str) -> None:
         """Persist StorageModel units to disk."""
+        pass
+
+    @abstractmethod
+    def read_units(self, db_path: str, schema: Dict[str, type]) -> Dict[str, StorageModel]:
+        """Load StorageModel units from disk using schema."""
         pass
 
     @abstractmethod
