@@ -4,6 +4,7 @@ from typing import Dict
 from model.StorageModel import StorageModel
 from model.ColumnModel import Column
 from utils.base_format import BaseFormat
+from model.UnitModel import UnitModel
 
 
 class Table:
@@ -28,7 +29,7 @@ class Table:
 
     def create_unit(self, name: str, dtype: type = str) -> None:
         """Convenience method for column-store schema creation."""
-        self.storage_units[name] = Column(name, dtype)
+        self.storage_units[name] = UnitModel.create(name, dtype)
 
     def insert(self, row: dict) -> None:
         """Insert a row into column storage."""
@@ -47,7 +48,7 @@ class Table:
 
         for col_name, raw_values in column_data.items():
             dtype = self._infer_dtype(raw_values)
-            unit = self.engine.make_unit(col_name, dtype)
+            unit = UnitModel.create(col_name, dtype)
             for v in raw_values:
                 unit.append(self._safe_cast(v, dtype))
             self.storage_units[col_name] = unit

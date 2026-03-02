@@ -38,8 +38,3 @@ class BaseFormat(ABC):
     def read_head(self, db_path: str) -> Dict[str, list]:
         """Read ALL data, returned as {column_name: [values]}."""
         pass
-
-    @abstractmethod
-    def make_unit(self, name: str, dtype: type) -> StorageModel:
-        """Factory: create the correct StorageModel for this engine."""
-        pass

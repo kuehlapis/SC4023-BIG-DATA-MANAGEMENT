@@ -60,7 +60,7 @@ class ColumnFormat(BaseFormat):
                         try:
                             col.append(dtype(value))
                         except Exception:
-                            col.append(value)  # safe fallback
+                            col.append(value)
 
             units[name] = col
 
@@ -110,7 +110,3 @@ class ColumnFormat(BaseFormat):
 
         print(f"[ColumnFormat] read_head loaded {len(column_data)} columns from '{db_path}'")
         return column_data
-
-    def make_unit(self, name: str, dtype: type) -> Column:
-        """Factory: create correct unit type for this engine."""
-        return Column(name, dtype)
