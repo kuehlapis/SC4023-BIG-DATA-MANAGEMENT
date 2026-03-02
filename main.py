@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from output_writer import write_scan_result
+from utils.output_writer import write_scan_result
 from query_engine import scan_all_pairs
 from storage import load_all_columns, validate_column_lengths
 

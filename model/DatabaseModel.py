@@ -50,7 +50,6 @@ class DatabaseModel:
 
         meta = MetaLoader.load(self.path)
         fmt = meta.get("engine")
-        print(fmt)
 
         if fmt not in self._ENGINE_MAP:
             raise ValueError(

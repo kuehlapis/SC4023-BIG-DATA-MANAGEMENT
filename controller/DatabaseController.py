@@ -1,11 +1,13 @@
+import csv
 from model.DatabaseModel import DatabaseModel
 from model.TableModel import Table
 from utils.column_format import ColumnFormat
 from view.DatabaseView import DatabaseView
 from utils.conditions import Condition
-from utils.helpers import _parse_month, _safe_float, parse_int
+from utils.helpers import Helpers
 from model.QueryModel import Query
 import time
+from utils.output_writer import write_scan_result
 
 
 class DatabaseController:
@@ -55,21 +57,64 @@ class DatabaseController:
 
         self.db_view.display_databases(databases)
         db_name = self.db_view.prompt_user("\nEnter database name")
-        # matric_num = self.db_view.prompt_user("\nEnter matric number")
+        matric_num = self.db_view.prompt_user("\nEnter matric number")
 
         db_model = DatabaseModel(db_name)
         engine = db_model.get_engine()
         table = Table(engine, name=db_name)
-        table.load(db_model.get_path()) 
+        path = db_model.get_path()
+        table.load(path) 
         q = Query(table)
 
         condition = Condition()
+        start_yr_mth = condition.start_yr_mth_from_matric(matric_num)
+        valid_towns = set(t.upper() for t in condition.towns_from_matric(matric_num))
+        
+        answers= []
+        try:
+            for months in range(1, 9):
+                for sqm in range(80, 151):
+                    end_month = Helpers.add_months(start_yr_mth, months)
+                    q.where("town", lambda x, t=valid_towns: x in t)
+                    q.where("month_num", lambda x, s=start_yr_mth, e=end_month: s <= x <= e)
+                    q.where("floor_area_sqm", lambda x, y=sqm: x >= y)
+                    min_psm = q.aggregate("psm_price", "min")
+                    q.where("psm_price", lambda x, m=min_psm: x == m)
+                    flats = q.fetch()
+                    answers.append({
+                        "months": months,
+                        "sqm": sqm,
+                        "end_month": end_month,
+                        "flats": flats
+                    })
 
-        amk_count = q.where("town", lambda x: x == "ANG MO KIO").select()
-        print(f"Flats in ANG MO KIO: {len(amk_count)}")
+            print(f"{len(answers)} queries executed successfully.")
+                    
+        except Exception as e:
+            print(f"Error during query execution: {e}")
+            return
+        
         load_end = time.time()
-        
-        print(f"\nDatabase '{db_name}' loaded in {load_end - start:.2f} seconds.")
+        print(f"\nQuery completed in {load_end - start:.2f} seconds.")
+
+        with open("results.csv", "w", newline="") as f:
+            writer = csv.writer(f)
+            
+            # Write header
+            col_names = list(table.storage_units.keys())
+            writer.writerow(["months", "sqm"] + col_names)
+            
+            # Write rows
+            for answer in answers:
+                for flat in answer["flats"]:
+                    writer.writerow(
+                        [answer["months"], answer["sqm"]] +
+                        [flat[col] for col in col_names]
+                    )
+
+        print(f"Results written to results.csv")
 
 
-        
+
+
+

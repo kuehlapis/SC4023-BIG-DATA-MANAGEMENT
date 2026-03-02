@@ -19,9 +19,25 @@ class BaseFormat(ABC):
         """Persist StorageModel units to disk."""
         pass
 
+
     @abstractmethod
-    def read_units(self, db_path: str, schema: Dict[str, type]) -> Dict[str, StorageModel]:
-        """Load StorageModel units from disk using schema."""
+    def write_month_num(self) -> None:
+        """Calculate and write 'month_num.col' based on 'month.col'."""
+        pass
+
+    @abstractmethod
+    def query_column(self, col_name: str)->list:
+        """Read specific columns from disk."""
+        pass
+
+    @abstractmethod
+    def write_psm_price(self) -> None:
+        """Calculate and write 'psm_price.col' based on 'resale_price.col' and 'floor_area_sqm.col'."""
+        pass
+
+    @abstractmethod
+    def read_head(self, db_path: str) -> Dict[str, list]:
+        """Read ALL data, returned as {column_name: [values]}."""
         pass
 
     @abstractmethod
@@ -29,12 +45,3 @@ class BaseFormat(ABC):
         """Read a single column by name."""
         pass
 
-    @abstractmethod
-    def read_row(self, db_path: str, row_index: int) -> dict:
-        """Read a single row by index."""
-        pass
-
-    @abstractmethod
-    def read_head(self, db_path: str) -> Dict[str, list]:
-        """Read ALL data, returned as {column_name: [values]}."""
-        pass
