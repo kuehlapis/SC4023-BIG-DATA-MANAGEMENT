@@ -1,0 +1,17 @@
+{
+    "name": "ResalePrices",
+    "path": "Database/ResalePrices",
+    "engine": "column",
+    "columns": [
+        "month",
+        "town",
+        "flat_type",
+        "block",
+        "street_name",
+        "storey_range",
+        "floor_area_sqm",
+        "flat_model",
+        "lease_commence_date",
+        "resale_price"
+    ]
+}
