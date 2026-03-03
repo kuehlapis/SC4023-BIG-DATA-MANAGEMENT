@@ -26,22 +26,17 @@ class BaseFormat(ABC):
         pass
 
     @abstractmethod
-    def query_column(self, col_name: str)->list:
-        """Read specific columns from disk."""
-        pass
-
-    @abstractmethod
     def write_psm_price(self) -> None:
         """Calculate and write 'psm_price.col' based on 'resale_price.col' and 'floor_area_sqm.col'."""
         pass
 
     @abstractmethod
-    def read_head(self, db_path: str) -> Dict[str, list]:
+    def read(self, db_path: str) -> Dict[str, list]:
         """Read ALL data, returned as {column_name: [values]}."""
         pass
 
     @abstractmethod
-    def read_column(self, db_path: str, column_name: str) -> list:
+    def read_column(self, column_name: str, db_path: str) -> list:
         """Read a single column by name."""
         pass
 

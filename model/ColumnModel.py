@@ -1,3 +1,4 @@
+# model/ColumnModel.py
 
 from model.StorageModel import StorageModel
 
@@ -13,26 +14,6 @@ class Column(StorageModel):
     def append(self, value) -> None:
         self.data.append(self.dtype(value))
 
-    def scan(self, indexes: list = None) -> list:
-        if indexes is not None:
-            return [self.data[i] for i in indexes]
-        return list(self.data)
-
-    def aggregate(self, func: str, indexes: list = None):
-        try:
-            data = self.scan(indexes)
-            if not data:
-                raise ValueError(f"No data to aggregate on column '{self.name}'.")
-            ops = {
-                "sum":   lambda d: sum(d),
-                "avg":   lambda d: sum(d) / len(d),
-                "min":   lambda d: min(d),
-                "max":   lambda d: max(d),
-                "count": lambda d: len(d),
-            }
-            if func not in ops:
-                raise ValueError(f"Unsupported aggregation '{func}'.")
-            return ops[func](data)
-        except Exception as e:
-            print(f"Error in aggregation on column '{self.name}': {e}")
-            return None
+    def scan(self) -> list:
+        """Return entire column data."""
+        return self.data

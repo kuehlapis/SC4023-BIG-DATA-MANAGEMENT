@@ -1,4 +1,6 @@
 import csv
+import time
+
 from model.DatabaseModel import DatabaseModel
 from model.TableModel import Table
 from utils.column_format import ColumnFormat
@@ -6,8 +8,7 @@ from view.DatabaseView import DatabaseView
 from utils.conditions import Condition
 from utils.helpers import Helpers
 from model.QueryModel import Query
-import time
-from utils.output_writer import write_scan_result
+from utils.output_writer import OutputWriter
 
 
 class DatabaseController:
@@ -33,10 +34,11 @@ class DatabaseController:
         DatabaseModel.validate_new_name(name)
 
         self.db_view.select_orientation()
-        orientation_choice = self.db_view.prompt_user("\nEnter orientation choice (column / row)")
+        orientation_choice = self.db_view.prompt_user(
+            "\nEnter orientation choice (column / row)"
+        )
         choice = DatabaseModel.validate_orientation_choice(orientation_choice)
 
-        # Pick the engine — extend here when RowFormat is ready
         if choice == "column":
             engine = ColumnFormat()
         elif choice == "row":
@@ -50,71 +52,83 @@ class DatabaseController:
 
     def select_db(self) -> None:
         start = time.time()
+
         databases = DatabaseModel.list_all_databases()
         if not databases:
             self.db_view.display_error("No databases found.")
             return
 
         self.db_view.display_databases(databases)
+
         db_name = self.db_view.prompt_user("\nEnter database name")
         matric_num = self.db_view.prompt_user("\nEnter matric number")
 
+        # Load database
         db_model = DatabaseModel(db_name)
         engine = db_model.get_engine()
         table = Table(engine, name=db_name)
-        path = db_model.get_path()
-        table.load(path) 
-        q = Query(table)
+        table.load(db_model.get_path())
 
         condition = Condition()
         start_yr_mth = condition.start_yr_mth_from_matric(matric_num)
-        valid_towns = set(t.upper() for t in condition.towns_from_matric(matric_num))
-        
-        answers= []
-        try:
-            for months in range(1, 9):
-                for sqm in range(80, 151):
-                    end_month = Helpers.add_months(start_yr_mth, months)
-                    q.where("town", lambda x, t=valid_towns: x in t)
-                    q.where("month_num", lambda x, s=start_yr_mth, e=end_month: s <= x <= e)
-                    q.where("floor_area_sqm", lambda x, y=sqm: x >= y)
-                    min_psm = q.aggregate("psm_price", "min")
-                    q.where("psm_price", lambda x, m=min_psm: x == m)
-                    flats = q.fetch()
-                    answers.append({
-                        "months": months,
-                        "sqm": sqm,
-                        "end_month": end_month,
-                        "flats": flats
-                    })
+        valid_towns = set(
+            t.upper() for t in condition.towns_from_matric(matric_num)
+        )
 
-            print(f"{len(answers)} queries executed successfully.")
-                    
+        results = []
+
+        try:
+            # --------------------------------------------------
+            # STATIC FILTER (town + lower month bound)
+            # --------------------------------------------------
+            base_query = Query(table)
+
+            base_query.where(
+                "town",
+                lambda x, towns=valid_towns: str(x).strip().upper() in towns
+            )
+
+            base_query.where(
+                "month_num",
+                lambda x, start=start_yr_mth: x >= start
+            )
+
+            # --------------------------------------------------
+            # FULL 8 × 71 SCAN
+            # --------------------------------------------------
+            for x in range(1, 9):
+
+                end_month = Helpers.add_months(start_yr_mth, x)
+
+                for y in range(80, 151):
+
+                    q = base_query.clone()
+
+                    q.where("month_num", lambda m, end=end_month: m <= end)
+                    q.where("floor_area_sqm", lambda area, min_sqm=y: area >= min_sqm)
+
+                    min_psm = q.aggregate("psm_price", "min")
+
+                    if min_psm is None or min_psm > 4725:
+                        results.append({"x": x, "y": y, "row": None})
+                        continue
+
+                    q.where("psm_price", lambda p, m=min_psm: p == m)
+
+                    flats = q.fetch()
+
+                    if not flats:
+                        results.append({"x": x, "y": y, "row": None})
+                    else:
+                        results.append({"x": x, "y": y, "row": flats[0]})
+
+            print("568 queries executed successfully.")
+
         except Exception as e:
             print(f"Error during query execution: {e}")
             return
-        
-        load_end = time.time()
-        print(f"\nQuery completed in {load_end - start:.2f} seconds.")
 
-        with open("results.csv", "w", newline="") as f:
-            writer = csv.writer(f)
-            
-            # Write header
-            col_names = list(table.storage_units.keys())
-            writer.writerow(["months", "sqm"] + col_names)
-            
-            # Write rows
-            for answer in answers:
-                for flat in answer["flats"]:
-                    writer.writerow(
-                        [answer["months"], answer["sqm"]] +
-                        [flat[col] for col in col_names]
-                    )
+        end_time = time.time()
+        print(f"\nQuery completed in {end_time - start:.2f} seconds.")
 
-        print(f"Results written to results.csv")
-
-
-
-
-
+        OutputWriter(matric_num).write(results)

@@ -3,9 +3,6 @@ from __future__ import annotations
 import csv
 from typing import Any
 
-from parsing import parse_month
-from query_engine import price_per_sqm
-
 
 class OutputWriter:
 
@@ -20,52 +17,40 @@ class OutputWriter:
         "Lease_Commence_Date",
         "Price_Per_Square_Meter",
     ]
-    def __init__(self):        
-        pass
 
-    @staticmethod
-    def write_scan_result(
-        out_path: str,
-        results: list[dict[str, Any]],
-        columns: dict[str, list[str]],
-    ) -> None:
-        """Write final ScanResult_<MatricNum>.csv file."""
-        with open(out_path, "w", newline="", encoding="utf-8") as file:
-            writer = csv.writer(file)
-            writer.writerow(OutputWriter.HEADER)
+    def __init__(self, matric_num: str):
+        self.output_file = f"ScanResult_{matric_num}.csv"
+
+    def write(self, results: list[dict[str, Any]]) -> None:
+        """Write query results to CSV in the required output format."""
+        with open(self.output_file, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(self.HEADER)
+
             for entry in results:
-                writer.writerow(OutputWriter.format_output_row(entry, columns))
+                x = entry["x"]
+                y = entry["y"]
+                row = entry["row"]
 
+                if row is None:
+                    writer.writerow([f"({x}, {y})", "No result", "", "", "", "", "", "", ""])
+                    continue
 
-    @staticmethod
-    def format_output_row(entry: dict[str, Any], columns: dict[str, list[str]]) -> list[str]:
-        """Format one output row for result CSV."""
-        x = entry["x"]
-        y = entry["y"]
-        idx = entry["row_index"]
+                month_num = row["month_num"]
+                year = month_num // 100
+                month = month_num % 100
 
-        if idx is None:
-            return [f"({x}, {y})", "No result", "", "", "", "", "", "", ""]
+                writer.writerow([
+                    f"({x}, {y})",
+                    str(year),
+                    f"{month:02d}",
+                    row["town"],
+                    row["block"],
+                    row["floor_area_sqm"],
+                    row["flat_model"],
+                    row["lease_commence_date"],
+                    str(round(row["psm_price"])),
+                ])
 
-        year, month = parse_month(columns["month"][idx])
-        psm = round(price_per_sqm(columns, idx))
-        return [
-            f"({x}, {y})",
-            str(year),
-            f"{month:02d}",
-            columns["town"][idx],
-            columns["block"][idx],
-            columns["floor_area_sqm"][idx],
-            columns["flat_model"][idx],
-            columns["lease_commence_date"][idx],
-            str(psm),
-        ]
+        print(f"Results written to {self.output_file}")
 
-
-def write_scan_result(
-    out_path: str,
-    results: list,
-    columns: dict | None = None,
-) -> None:
-    """Module-level convenience wrapper around OutputWriter.write_scan_result."""
-    OutputWriter.write_scan_result(out_path, results, columns if columns is not None else {})

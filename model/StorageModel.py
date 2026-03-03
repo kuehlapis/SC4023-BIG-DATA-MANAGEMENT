@@ -10,9 +10,6 @@ class StorageModel(ABC):
         pass
 
     @abstractmethod
-    def scan(self, indexes: list = None) -> list:
-        pass
-
-    @abstractmethod
-    def aggregate(self, func: str, indexes: list = None):
+    def scan(self) -> list:
+        """Return all stored values."""
         pass
