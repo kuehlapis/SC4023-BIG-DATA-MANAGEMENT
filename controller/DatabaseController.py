@@ -66,8 +66,8 @@ class DatabaseController:
             db_name = self.db_view.prompt_user("\nEnter database name")
             matric_num = self.db_view.prompt_user("\nEnter matric number")
 
-            x = self.db_view.prompt_user("\nEnter month number (1-8)") # month number
-            y = self.db_view.prompt_user("\nEnter floor area in sqm (80-150)") #min price per sqm
+            # x = self.db_view.prompt_user("\nEnter month number (1-8)") # month number
+            # y = self.db_view.prompt_user("\nEnter floor area in sqm (80-150)") #min price per sqm
 
             # Load database
             db_model = DatabaseModel(db_name)
@@ -86,37 +86,37 @@ class DatabaseController:
             try:
                 start = time.time()
                 base_query = Query(table)
-
                 base_query.where(
                     "town",
                     lambda x, towns=valid_towns: str(x).strip().upper() in towns
                 )
 
-                base_query.where(
-                    "month_num",
-                    lambda x, start=start_yr_mth: x >= start
-                )
+                for x in range(1, 9):
+                    base_query.where(
+                            "month_num",
+                            lambda x, start=start_yr_mth: x >= start
+                        )
+                    
+                    end_month = Helpers.add_months(start_yr_mth, int(x))
+                    for y in range(80, 151):
+                        q = base_query.clone()
 
-                end_month = Helpers.add_months(start_yr_mth, int(x))
+                        q.where("month_num", lambda m, end=end_month: m <= end)
+                        q.where("floor_area_sqm", lambda area, min_sqm=float(y): area >= min_sqm)
 
-                q = base_query.clone()
+                        min_psm = q.aggregate("psm_price", "min")
 
-                q.where("month_num", lambda m, end=end_month: m <= end)
-                q.where("floor_area_sqm", lambda area, min_sqm=float(y): area >= min_sqm)
+                        if min_psm is None or min_psm > 4725:
+                            results.append({"x": x, "y": y, "row": None})
 
-                min_psm = q.aggregate("psm_price", "min")
+                        q.where("psm_price", lambda p, m=min_psm: p == m)
 
-                if min_psm is None or min_psm > 4725:
-                    results.append({"x": x, "y": y, "row": None})
+                        flats = q.fetch()
 
-                q.where("psm_price", lambda p, m=min_psm: p == m)
-
-                flats = q.fetch()
-
-                if not flats:
-                    results.append({"x": x, "y": y, "row": None})
-                else:
-                    results.append({"x": x, "y": y, "row": flats[0]})
+                        if not flats:
+                            results.append({"x": x, "y": y, "row": None})
+                        else:
+                            results.append({"x": x, "y": y, "row": flats[0]})
 
                 end_time = time.time()
                 print(f"\nQuery completed in {end_time - start:.2f} seconds.")
@@ -124,9 +124,7 @@ class DatabaseController:
             except Exception as e:
                 print(f"Error during query execution: {e}")
                 return
-
             
-
             OutputWriter(matric_num).write(results)
         except Exception as e:
             self.db_view.display_error(str(e))
