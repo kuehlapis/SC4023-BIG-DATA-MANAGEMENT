@@ -80,6 +80,7 @@ class DatabaseController:
             valid_towns = set(
                 t.upper() for t in condition.towns_from_matric(matric_num)
             )
+            valid_towns_int = set(condition.town_ints_from_matric(matric_num))
 
             results = []
 
@@ -87,11 +88,18 @@ class DatabaseController:
                 start = time.time()
                 base_query = Query(table)
 
+                
                 base_query.where(
                     "town",
                     lambda x, towns=valid_towns: str(x).strip().upper() in towns
                 )
-
+                
+                """
+                base_query.where(
+                    "town_int",
+                    lambda x, towns_int=valid_towns_int: str(x) in towns_int
+                )
+                """
                 base_query.where(
                     "month_num",
                     lambda x, start=start_yr_mth: x >= start
@@ -119,7 +127,7 @@ class DatabaseController:
                     results.append({"x": x, "y": y, "row": flats[0]})
 
                 end_time = time.time()
-                print(f"\nQuery completed in {end_time - start:.2f} seconds.")
+                print(f"\nQuery completed in {end_time - start:.4f} seconds.")
 
             except Exception as e:
                 print(f"Error during query execution: {e}")

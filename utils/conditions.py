@@ -17,6 +17,21 @@ class Condition:
         "9": "YISHUN",
     }
 
+    TOWN_INT_BY_DIGIT = {
+        "0": "2",
+        "1": "6",
+        "2": "10",
+        "3": "9",
+        "4": "12",
+        "5": "14",
+        "6": "17",
+        "7": "23",
+        "8": "25",
+        "9": "26",
+    }
+
+
+
     def _matric_digits(self, matric_num: str) -> list[str]:
         # cache digits to avoid reparsing on every call
         if not hasattr(self, "_cached_digits") or self._cached_matric != matric_num:
@@ -32,6 +47,12 @@ class Condition:
         digits = self._matric_digits(matric_num)
         towns = {self.TOWN_BY_DIGIT[d] for d in digits}
         return sorted(towns)
+    
+    def town_ints_from_matric(self, matric_num: str) -> list[str]:
+        """Return sorted unique town integers mapped from digits in matric number."""
+        digits = self._matric_digits(matric_num)
+        town_ints = {self.TOWN_INT_BY_DIGIT[d] for d in digits}
+        return sorted(town_ints)
 
     def target_year_from_matric(self, matric_num: str) -> int:
         last_digit = int(self._matric_digits(matric_num)[-1])
