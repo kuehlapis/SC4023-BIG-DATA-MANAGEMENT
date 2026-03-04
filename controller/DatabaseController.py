@@ -3,7 +3,7 @@ import time
 
 from model.DatabaseModel import DatabaseModel
 from model.TableModel import Table
-from utils.column_format import ColumnFormat
+from model.ColumnModel import Column
 from view.DatabaseView import DatabaseView
 from utils.conditions import Condition
 from utils.helpers import Helpers
@@ -41,7 +41,7 @@ class DatabaseController:
             choice = DatabaseModel.validate_orientation_choice(orientation_choice)
 
             if choice == "column":
-                engine = ColumnFormat()
+                engine = Column
             elif choice == "row":
                 raise NotImplementedError("Row-oriented format not yet implemented.")
             else:
@@ -73,13 +73,13 @@ class DatabaseController:
             db_model = DatabaseModel(db_name)
             engine = db_model.get_engine()
             table = Table(engine, name=db_name)
-            table.load(db_model.get_path())
+            table.load()
 
             condition = Condition()
             start_yr_mth = condition.start_yr_mth_from_matric(matric_num)
-            valid_towns = set(
-                t.upper() for t in condition.towns_from_matric(matric_num)
-            )
+            # valid_towns = set(
+            #     t.upper() for t in condition.towns_from_matric(matric_num)
+            # )
             valid_towns_int = set(condition.town_ints_from_matric(matric_num))
 
             results = []
@@ -89,17 +89,17 @@ class DatabaseController:
                 base_query = Query(table)
 
                 
-                base_query.where(
-                    "town",
-                    lambda x, towns=valid_towns: str(x).strip().upper() in towns
-                )
+                # base_query.where(
+                #     "town",
+                #     lambda x, towns=valid_towns: str(x).strip().upper() in towns
+                # )
                 
-                """
+                
                 base_query.where(
                     "town_int",
                     lambda x, towns_int=valid_towns_int: str(x) in towns_int
                 )
-                """
+                
                 base_query.where(
                     "month_num",
                     lambda x, start=start_yr_mth: x >= start

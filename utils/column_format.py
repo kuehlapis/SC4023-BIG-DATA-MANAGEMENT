@@ -4,7 +4,7 @@ import pandas as pd
 
 from utils.base_format import BaseFormat
 from model.StorageModel import StorageModel
-from model.ColumnModel import Column
+
 
 
 class ColumnFormat(BaseFormat):
@@ -12,37 +12,78 @@ class ColumnFormat(BaseFormat):
 
     FORMAT_NAME = "column"
 
-    def write(self, df: pd.DataFrame, db_path: str, metadata: dict) -> dict:
-        os.makedirs(db_path, exist_ok=True)
+    TOWN_MAP = {
+        "ANG MO KIO": 1,
+        "BEDOK": 2,
+        "BISHAN": 3,
+        "BUKIT BATOK": 4,
+        "BUKIT MERAH": 5,
+        "BUKIT PANJANG": 6,
+        "BUKIT TIMAH": 7,
+        "CENTRAL AREA": 8,
+        "CHOA CHU KANG": 9,
+        "CLEMENTI": 10,
+        "GEYLANG": 11,
+        "HOUGANG": 12,
+        "JURONG EAST": 13,
+        "JURONG WEST": 14,
+        "KALLANG/WHAMPOA": 15,
+        "MARINE PARADE": 16,
+        "PASIR RIS": 17,
+        "PUNGGOL": 18,
+        "QUEENSTOWN": 19,
+        "SEMBAWANG": 20,
+        "SENGKANG": 21,
+        "SERANGOON": 22,
+        "TAMPINES": 23,
+        "TOA PAYOH": 24,
+        "WOODLANDS": 25,
+        "YISHUN": 26
+    }
 
-        columns = []
-        for col in df.columns:
-            file_path = os.path.join(db_path, f"{col}.col")
-            df[col].astype(str).to_csv(file_path, index=False, header=False)
-            columns.append(col)
+    def __init__(self, db_path: str = None):
+        self.column_path = db_path
 
-        metadata.update({
-            "columns": columns
-        })
+    def write(self, df: pd.DataFrame, metadata: dict) -> None:
+        try:
+            os.makedirs(self.column_path, exist_ok=True)
 
-        print(f"[ColumnFormat] Wrote {len(df)} rows × {len(columns)} columns → '{db_path}'")
-        return metadata
+            columns = []
+            for col in df.columns:
+                file_path = os.path.join(self.column_path, f"{col}.col")
+                df[col].astype(str).to_csv(file_path, index=False, header=False)
+                columns.append(col)
 
-    def write_units(self, units: Dict[str, StorageModel], db_path: str) -> None:
-        os.makedirs(db_path, exist_ok=True)
+            self.psm_price()
+            self.month_num()
+            self.compress_town()
+            columns.extend(["psm_price", "month_num", "town_int"])
+            
+            metadata.update({
+                "columns": columns
+            })
+            print(f"[ColumnFormat] Wrote {len(df)} rows × {len(columns)} columns → '{self.column_path}'")
+        except Exception as e:
+            print(f"Error in ColumnFormat.write: {e}")
 
-        for name, unit in units.items():
-            file_path = os.path.join(db_path, f"{name}.col")
-            with open(file_path, "w", encoding="utf-8") as f:
-                for value in unit.scan():
-                    f.write(str(value) + "\n")
+    def write_units(self, units: Dict[str, StorageModel]) -> None:
+        try:
+            os.makedirs(self.column_path, exist_ok=True)
 
-        print(f"[ColumnFormat] Wrote {len(units)} columns → '{db_path}'")
+            for name, unit in units.items():
+                file_path = os.path.join(self.column_path, f"{name}.col")
+                with open(file_path, "w", encoding="utf-8") as f:
+                    for value in unit.scan():
+                        f.write(str(value) + "\n")
 
-    def read_column(self, col_name: str, path: str)-> list:
+            print(f"[ColumnFormat] Wrote {len(units)} columns → '{self.column_path}'")
+        except Exception as e:
+            print(f"Error in ColumnFormat.write_units: {e}")
+
+    def read_column(self, col_name: str)-> list:
         """Reads only the necessary column file."""
         try:
-            file_path = os.path.join(path, f"{col_name}.col")
+            file_path = os.path.join(self.column_path, f"{col_name}.col")
             if os.path.exists(file_path):
                 with open(file_path, "r", encoding="utf-8") as f:
                     data = [line.strip() for line in f if line.strip() != ""]
@@ -53,7 +94,7 @@ class ColumnFormat(BaseFormat):
             print(f"Error in read_column: {e}")
             return []
     
-    def write_month_num(self, path: str) -> None:
+    def month_num(self) -> None:
         """Reads 'month.col' (MMM-YY format) and writes a new 'month_num.col' in YYYYMM format.
         e.g. 'Jan-15' → '201501'"""
         try:
@@ -63,7 +104,7 @@ class ColumnFormat(BaseFormat):
                 "Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12"
             }
             
-            raw = self.read_column("month", path)
+            raw = self.read_column("month")
 
             if not raw:
                 print("Error: 'month.col' not found or is empty.")
@@ -80,19 +121,19 @@ class ColumnFormat(BaseFormat):
                     print(f"Warning: Skipping unrecognised row '{row}'")
                     month_nums.append("")
 
-            target_path = os.path.join(path, "month_num.col")
+            target_path = os.path.join(self.column_path, "month_num.col")
             with open(target_path, "w", encoding="utf-8") as f:
                 f.write("\n".join(month_nums) + "\n")
             print(f"Written {len(month_nums)} rows to 'month_num.col'")
         except Exception as e:
             print(f"Error in write_month_num: {e}")
 
-    def write_psm_price(self, path: str) -> None:
+    def psm_price(self) -> None:
         """Calculates price per square metre (PSM) from resale_price and floor_area_sqm columns,
         and writes the result to 'psm_price.col'."""
         try:
-            prices = self.read_column("resale_price", path)
-            areas = self.read_column("floor_area_sqm", path)
+            prices = self.read_column("resale_price")
+            areas = self.read_column("floor_area_sqm")
             
             if not prices or not areas:
                 print("Error: 'resale_price.col' or 'floor_area_sqm.col' not found or is empty.")
@@ -111,27 +152,48 @@ class ColumnFormat(BaseFormat):
                     print(f"Warning: Skipping invalid row (price='{price}', area='{area}')")
                     psm_prices.append("")
 
-            target_path = os.path.join(path, "psm_price.col")
+            target_path = os.path.join(self.column_path, "psm_price.col")
             with open(target_path, "w", encoding="utf-8") as f:
                 f.write("\n".join(psm_prices) + "\n")
             print(f"Written {len(psm_prices)} rows to 'psm_price.col'")
         except Exception as e:
             print(f"Error in write_psm_price: {e}")
 
-    def read(self, db_path: str) -> Dict[str, list]:
+    def read(self) -> Dict[str, list]:
         try:
-            if not os.path.exists(db_path):
-                raise FileNotFoundError(f"Database directory not found: {db_path}")
+            if not os.path.exists(self.column_path):
+                raise FileNotFoundError(f"Database directory not found: {self.column_path}")
 
             column_data = {}
 
-            for file in sorted(os.listdir(db_path)):
+            for file in sorted(os.listdir(self.column_path)):
                 if file.endswith(".col"):
                     col_name = file[:-4]
-                    column_data[col_name] = self.read_column(col_name, db_path)
+                    column_data[col_name] = self.read_column(col_name)
 
-            print(f"[ColumnFormat] read loaded {len(column_data)} columns from '{db_path}'")
+            print(f"[ColumnFormat] read loaded {len(column_data)} columns from '{self.column_path}'")
             return column_data
         except Exception as e:
             print(f"Error in read: {e}")
             return {}
+        
+    def compress_town(self) -> None:
+            """Compress town names to integers."""
+            try:
+                town_str = self.read_column("town")
+                
+                if not town_str:
+                    print("Error: 'town.col' not found or is empty.")
+                    return
+                
+                town_int = []   
+
+                for t in town_str:
+                    town_int.append(str(self.TOWN_MAP.get(t)))
+
+                target_path = os.path.join(self.column_path, "town_int.col")
+                with open(target_path, "w", encoding="utf-8") as f:
+                    f.write("\n".join(town_int) + "\n")
+                print(f"Written {len(town_int)} rows to 'town_int.col'")
+            except Exception as e:
+                print(f"Error in compress_town: {e}")

@@ -19,24 +19,23 @@ class BaseFormat(ABC):
         """Persist StorageModel units to disk."""
         pass
 
-
     @abstractmethod
-    def write_month_num(self) -> None:
-        """Calculate and write 'month_num.col' based on 'month.col'."""
+    def month_num(self) -> None:
+        """Calculate and write 'month_num' based on 'month'."""
         pass
 
     @abstractmethod
-    def write_psm_price(self) -> None:
-        """Calculate and write 'psm_price.col' based on 'resale_price.col' and 'floor_area_sqm.col'."""
+    def psm_price(self) -> None:
+        """Calculate and write 'psm_price' based on 'resale_price' and 'floor_area_sqm'."""
         pass
 
     @abstractmethod
     def read(self, db_path: str) -> Dict[str, list]:
-        """Read ALL data, returned as {column_name: [values]}."""
+        """Read ALL data"""
         pass
 
     @abstractmethod
-    def read_column(self, column_name: str, db_path: str) -> list:
-        """Read a single column by name."""
+    def compress_town(self) -> None:
+        """Compress 'town' by mapping town names to integers."""
         pass
 

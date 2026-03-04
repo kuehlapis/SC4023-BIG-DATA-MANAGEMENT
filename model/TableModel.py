@@ -2,7 +2,6 @@
 
 from typing import Dict
 from model.StorageModel import StorageModel
-from utils.base_format import BaseFormat
 from model.UnitModel import UnitModel
 from utils.helpers import Helpers
 
@@ -10,10 +9,10 @@ from utils.helpers import Helpers
 class Table:
     """
     A collection of StorageModel units (columns or rows).
-    Delegates all file I/O to a BaseFormat engine.
+    Delegates all file I/O to a StorageModel engine.
     """
 
-    def __init__(self, engine: BaseFormat, name: str = None):
+    def __init__(self, engine: StorageModel, name: str = None):
         self.engine = engine
         self.name = name
         self.storage_units: Dict[str, StorageModel] = {}
@@ -47,12 +46,12 @@ class Table:
                 raise KeyError(f"Field '{field}' not in table schema.")
             self.storage_units[field].append(value)
 
-    def save(self, db_path: str) -> None:
-        self.engine.write_units(self.storage_units, db_path)
+    def save(self) -> None:
+        self.engine.write_units(self.storage_units)
 
-    def load(self, db_path: str) -> "Table":
+    def load(self) -> "Table":
         try:
-            column_data: Dict[str, list] = self.engine.read(db_path)
+            column_data: Dict[str, list] = self.engine.read()
 
             for col_name, raw_values in column_data.items():
                 dtype = Helpers._infer_dtype(raw_values)
@@ -63,5 +62,5 @@ class Table:
             return self
 
         except Exception as e:
-            print(f"Error loading table from '{db_path}': {e}")
+            print(f"Error loading table from '{self.engine.db_path}': {e}")
             return self
