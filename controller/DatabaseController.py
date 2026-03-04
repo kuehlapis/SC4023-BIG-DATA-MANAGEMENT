@@ -97,12 +97,12 @@ class DatabaseController:
                     lambda x, start=start_yr_mth: x >= start
                 )
 
-                end_month = Helpers.add_months(start_yr_mth, x)
+                end_month = Helpers.add_months(start_yr_mth, int(x))
 
                 q = base_query.clone()
 
                 q.where("month_num", lambda m, end=end_month: m <= end)
-                q.where("floor_area_sqm", lambda area, min_sqm=y: area >= min_sqm)
+                q.where("floor_area_sqm", lambda area, min_sqm=float(y): area >= min_sqm)
 
                 min_psm = q.aggregate("psm_price", "min")
 
