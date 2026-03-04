@@ -19,7 +19,8 @@ class Query:
 
     def clone(self) -> "Query":
         """Create a lightweight copy for reuse."""
-        new_q = Query(self.table)
+        new_q = Query.__new__(Query)
+        new_q.table = self.table
         new_q._column_cache = self._column_cache
         new_q._selected_indexes = self._selected_indexes.copy()
         return new_q

@@ -19,7 +19,7 @@ class OutputWriter:
     ]
 
     def __init__(self, matric_num: str):
-        self.output_file = f"ScanResult_{matric_num}.csv"
+        self.output_file = f"result/ScanResult_{matric_num}.csv"
 
     def write(self, results: list[dict[str, Any]]) -> None:
         """Write query results to CSV in the required output format."""
