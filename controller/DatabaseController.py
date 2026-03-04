@@ -55,7 +55,6 @@ class DatabaseController:
 
     def select_db(self) -> None:
         try:
-            start = time.time()
 
             databases = DatabaseModel.list_all_databases()
             if not databases:
@@ -85,6 +84,7 @@ class DatabaseController:
             results = []
 
             try:
+                start = time.time()
                 base_query = Query(table)
 
                 base_query.where(
@@ -118,12 +118,14 @@ class DatabaseController:
                 else:
                     results.append({"x": x, "y": y, "row": flats[0]})
 
+                end_time = time.time()
+                print(f"\nQuery completed in {end_time - start:.2f} seconds.")
+
             except Exception as e:
                 print(f"Error during query execution: {e}")
                 return
 
-            end_time = time.time()
-            print(f"\nQuery completed in {end_time - start:.2f} seconds.")
+            
 
             OutputWriter(matric_num).write(results)
         except Exception as e:
