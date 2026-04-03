@@ -38,3 +38,4 @@ class Column(StorageModel):
         """Read this column from a .col file using ColumnFormat."""
         return self.columnformat.read()
 
+

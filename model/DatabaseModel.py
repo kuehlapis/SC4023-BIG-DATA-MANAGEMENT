@@ -36,7 +36,7 @@ class DatabaseModel:
                 "path": self.path,
                 "engine": self.engine.format_name(),
             }
-            
+
             self.engine.write(df, metadata)
             MetaLoader.save(self.path, metadata)
             print(f"[DatabaseModel] Created database '{self.name}' at '{self.path}'")

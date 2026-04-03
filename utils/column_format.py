@@ -47,18 +47,17 @@ class ColumnFormat(BaseFormat):
     def write(self, df: pd.DataFrame, metadata: dict) -> None:
         try:
             os.makedirs(self.column_path, exist_ok=True)
-
-            columns = []
-            for col in df.columns:
+            
+            df = self.psm_price(df)
+            df = self.month_num(df)
+            df = self.compress_town(df)
+            df =  self.sort_column("month_num", df)
+            
+            columns = df.columns.tolist()
+            for col in columns:
                 file_path = os.path.join(self.column_path, f"{col}.col")
                 df[col].astype(str).to_csv(file_path, index=False, header=False)
-                columns.append(col)
 
-            self.psm_price()
-            self.month_num()
-            self.compress_town()
-            columns.extend(["psm_price", "month_num", "town_int"])
-            
             metadata.update({
                 "columns": columns
             })
@@ -94,70 +93,60 @@ class ColumnFormat(BaseFormat):
             print(f"Error in read_column: {e}")
             return []
     
-    def month_num(self) -> None:
-        """Reads 'month.col' (MMM-YY format) and writes a new 'month_num.col' in YYYYMM format.
+    def month_num(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Convert 'month.col' (MMM-YY format) to 'month_num' column in YYYYMM format.
         e.g. 'Jan-15' → '201501'"""
         try:
+            if "month" not in df.columns:
+                print("Warning: 'month' column not found.")
+                return df
+
             month_map = {
                 "Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04",
                 "May": "05", "Jun": "06", "Jul": "07", "Aug": "08",
                 "Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12"
             }
-            
-            raw = self.read_column("month")
 
-            if not raw:
-                print("Error: 'month.col' not found or is empty.")
-                return
-            
-            month_nums = []
-            for row in raw:
+            def parse_month(month_str):
                 try:
-                    mmm, yy = row.split("-")
+                    mmm, yy = str(month_str).strip().split("-")
                     yyyy = f"20{yy}"
                     mm = month_map[mmm]
-                    month_nums.append(f"{yyyy}{mm}")
+                    return f"{yyyy}{mm}"
                 except (ValueError, KeyError):
-                    print(f"Warning: Skipping unrecognised row '{row}'")
-                    month_nums.append("")
+                    print(f"Warning: Skipping unrecognised month '{month_str}'")
+                    return ""
 
-            target_path = os.path.join(self.column_path, "month_num.col")
-            with open(target_path, "w", encoding="utf-8") as f:
-                f.write("\n".join(month_nums) + "\n")
-            print(f"Written {len(month_nums)} rows to 'month_num.col'")
+            df["month_num"] = df["month"].apply(parse_month)
+            print(f"Created 'month_num' column with {len(df)} rows")
+            return df
         except Exception as e:
-            print(f"Error in write_month_num: {e}")
+            print(f"Error in month_num: {e}")
+            return df
 
-    def psm_price(self) -> None:
-        """Calculates price per square metre (PSM) from resale_price and floor_area_sqm columns,
-        and writes the result to 'psm_price.col'."""
+    def psm_price(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Calculate price per square metre (PSM) from resale_price and floor_area_sqm columns."""
         try:
-            prices = self.read_column("resale_price")
-            areas = self.read_column("floor_area_sqm")
-            
-            if not prices or not areas:
-                print("Error: 'resale_price.col' or 'floor_area_sqm.col' not found or is empty.")
-                return
-            
-            if len(prices) != len(areas):
-                print("Error: Column lengths do not match.")
-                return
-            
-            psm_prices = []
-            for price, area in zip(prices, areas):
-                try:
-                    psm = float(price) / float(area)
-                    psm_prices.append(f"{psm:.2f}")
-                except (ValueError, ZeroDivisionError):
-                    print(f"Warning: Skipping invalid row (price='{price}', area='{area}')")
-                    psm_prices.append("")
+            if "resale_price" not in df.columns or "floor_area_sqm" not in df.columns:
+                print("Error: 'resale_price' or 'floor_area_sqm' columns not found.")
+                return df
 
-            target_path = os.path.join(self.column_path, "psm_price.col")
-            with open(target_path, "w", encoding="utf-8") as f:
-                f.write("\n".join(psm_prices) + "\n")
-            print(f"Written {len(psm_prices)} rows to 'psm_price.col'")
+            def calc_psm(row):
+                try:
+                    price = float(row["resale_price"])
+                    area = float(row["floor_area_sqm"])
+                    if area == 0:
+                        return ""
+                    return f"{price / area:.2f}"
+                except (ValueError, TypeError):
+                    return ""
+
+            df["psm_price"] = df.apply(calc_psm, axis=1)
+            print(f"Created 'psm_price' column with {len(df)} rows")
+            return df
         except Exception as e:
-            print(f"Error in write_psm_price: {e}")
+            print(f"Error in psm_price: {e}")
+            return df
 
     def read(self) -> Dict[str, list]:
         try:
@@ -177,23 +166,33 @@ class ColumnFormat(BaseFormat):
             print(f"Error in read: {e}")
             return {}
         
-    def compress_town(self) -> None:
-            """Compress town names to integers."""
-            try:
-                town_str = self.read_column("town")
-                
-                if not town_str:
-                    print("Error: 'town.col' not found or is empty.")
-                    return
-                
-                town_int = []   
+    def compress_town(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Compress town names to integers."""
+        try:
+            if "town" not in df.columns:
+                print("Warning: 'town' column not found.")
+                return df
 
-                for t in town_str:
-                    town_int.append(str(self.TOWN_MAP.get(t)))
+            df["town_int"] = df["town"].apply(lambda t: str(self.TOWN_MAP.get(t, "")))
+            print(f"Created 'town_int' column with {len(df)} rows")
+            return df
+        except Exception as e:
+            print(f"Error in compress_town: {e}")
+            return df
 
-                target_path = os.path.join(self.column_path, "town_int.col")
-                with open(target_path, "w", encoding="utf-8") as f:
-                    f.write("\n".join(town_int) + "\n")
-                print(f"Written {len(town_int)} rows to 'town_int.col'")
-            except Exception as e:
-                print(f"Error in compress_town: {e}")
+    def sort_column(self, col_name: str, df: pd.DataFrame) -> pd.DataFrame:
+        """Sort the DataFrame by one column and save it as sorted_{column_name}.csv."""
+        try:
+            if df is None or df.empty:
+                raise ValueError("Input DataFrame is empty.")
+
+            if col_name not in df.columns:
+                raise KeyError(f"Column '{col_name}' not found in DataFrame.")
+
+            sorted_df = df.sort_values(by=col_name, kind="mergesort")
+            print(f"Sorted DataFrame by column '{col_name}' with {len(sorted_df)} rows.")
+            
+            return sorted_df
+        except Exception as e:
+            print(f"Error in sort_column: {e}")
+            return df
