@@ -16,6 +16,7 @@ class Table:
         self.engine = engine
         self.name = name
         self.storage_units: Dict[str, StorageModel] = {}
+        self.sorted_columns: Dict[str, bool] = {}  # Track which columns are sorted
 
     def add_unit(self, name: str, unit: StorageModel) -> None:
         self.storage_units[name] = unit
@@ -52,12 +53,18 @@ class Table:
     def load(self) -> "Table":
         try:
             column_data: Dict[str, list] = self.engine.read()
+            
+            # Columns that are physically sorted in this data
+            sorted_cols = ["month_num"]
 
             for col_name, raw_values in column_data.items():
                 dtype = Helpers._infer_dtype(raw_values)
                 unit = UnitModel.create(col_name, dtype)
                 unit.data = [Helpers._safe_cast(v, dtype) for v in raw_values]
                 self.storage_units[col_name] = unit
+                
+                # Mark if column is sorted
+                self.sorted_columns[col_name] = col_name in sorted_cols
 
             return self
 

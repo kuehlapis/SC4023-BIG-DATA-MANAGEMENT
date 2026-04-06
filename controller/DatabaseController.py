@@ -77,7 +77,7 @@ class DatabaseController:
             # valid_towns = set(
             #     t.upper() for t in condition.towns_from_matric(matric_num)
             # )
-            valid_towns_int = set(condition.town_ints_from_matric(matric_num))
+            valid_towns_int = {int(v) for v in condition.town_ints_from_matric(matric_num)}
 
             results = []
 
@@ -90,38 +90,35 @@ class DatabaseController:
                 #     "town",
                 #     lambda x, towns=valid_towns: str(x).strip().upper() in towns
                 # )
-                
-                base_query.where(
-                    "town_int",
-                    lambda x, towns_int=valid_towns_int: str(x) in towns_int
-                )
+
+                # Faster than lambda-based predicate for repeated filtering
+                base_query.where_in("town_int", valid_towns_int)
 
                 print(f"Number of records after town filter: {len(base_query.select())}")
 
                 
-                base_query.where(
-                    "month_num",
-                    lambda x, start=start_yr_mth: x >= start
-                )
+                base_query.where_gte("month_num", start_yr_mth)
 
                 print(f"Number of records after month filter: {len(base_query.select())}")
 
 
                 for x in range(1, 9):
                     end_month = Helpers.add_months(start_yr_mth, int(x))
-                    base_query.where("month_num", lambda m, end=end_month: m <= end)
+                    base_query.where_lte("month_num", end_month)
+
+                    area_query = base_query.clone()
 
                     for y in range(80, 151):
-                        q = base_query.clone()
-                        q.where("floor_area_sqm", lambda area, min_sqm=float(y): area >= min_sqm)
+                        area_query.where_gte("floor_area_sqm", float(y))
 
-                        min_psm = q.aggregate("psm_price", "min")
+                        min_psm = area_query.aggregate("psm_price", "min")
                         
                         if min_psm is None or min_psm > 4725:
                             results.append({"x": x, "y": y, "row": None})
                             continue
 
-                        q.where("psm_price", lambda p, m=min_psm: p == m)
+                        q = area_query.clone()
+                        q.where_eq("psm_price", min_psm)
 
                         flats = q.fetch()
 
