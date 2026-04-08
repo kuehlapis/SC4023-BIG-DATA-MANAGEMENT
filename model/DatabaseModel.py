@@ -92,6 +92,6 @@ class DatabaseModel:
     @staticmethod
     def validate_orientation_choice(choice: str) -> str:
         choice = choice.strip().lower()
-        if choice not in {"column", "row"}:
-            raise ValueError("Choice must be 'column' or 'row'.")
+        if choice not in {"1", "2"}:
+            raise ValueError("Choice must be '1' or '2'.")
         return choice

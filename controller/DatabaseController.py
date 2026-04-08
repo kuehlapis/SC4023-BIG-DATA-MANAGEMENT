@@ -56,13 +56,13 @@ class DatabaseController:
 
             self.db_view.select_orientation()
             orientation_choice = self.db_view.prompt_user(
-                "\nEnter orientation choice (column / row)"
+                "\nEnter orientation choice"
             )
             choice = DatabaseModel.validate_orientation_choice(orientation_choice)
 
-            if choice == "column":
+            if choice == "2":
                 engine = Column
-            elif choice == "row":
+            elif choice == "1":
                 raise NotImplementedError("Row-oriented format not yet implemented.")
             else:
                 raise ValueError(f"Unknown orientation: {choice}")
