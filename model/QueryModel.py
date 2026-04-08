@@ -62,8 +62,8 @@ class Query:
     def where_gte(self, column: str, threshold) -> "Query":
         col_data = self._column_cache[column]
         
-        # Use binary search if column is sorted and no prior filters
-        if self.table.sorted_columns.get(column, False) and len(self._selected_indexes) == len(col_data):
+        if column in self.table.sorted_columns and len(self._selected_indexes) == len(col_data):
+            print("using binary search for where_gte")
             start_idx = bisect.bisect_left(col_data, threshold)
             self._selected_indexes = list(range(start_idx, len(col_data)))
         else:
@@ -77,8 +77,8 @@ class Query:
     def where_lte(self, column: str, threshold) -> "Query":
         col_data = self._column_cache[column]
         
-        # Use binary search if column is sorted and no prior filters
-        if self.table.sorted_columns.get(column, False) and len(self._selected_indexes) == len(col_data):
+        if column in self.table.sorted_columns and len(self._selected_indexes) == len(col_data):
+            print("using binary search for where_lte")
             end_idx = bisect.bisect_right(col_data, threshold)
             self._selected_indexes = list(range(end_idx))
         else:

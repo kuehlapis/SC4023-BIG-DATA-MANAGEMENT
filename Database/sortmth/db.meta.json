@@ -1,6 +1,6 @@
 {
-    "name": "sortedmth",
-    "path": "Database\\sortedmth",
+    "name": "sortmth",
+    "path": "Database\\sortmth",
     "engine": "column",
     "columns": [
         "month",
@@ -16,5 +16,8 @@
         "psm_price",
         "month_num",
         "town_int"
+    ],
+    "sorted_columns": [
+        "month_num"
     ]
 }

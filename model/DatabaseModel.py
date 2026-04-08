@@ -65,7 +65,7 @@ class DatabaseModel:
         except Exception as e:
             print(f"Error resolving engine for database '{self.name}': {e}")
             raise
-
+        
     def get_path(self) -> str:
         return self.path
     

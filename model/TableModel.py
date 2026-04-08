@@ -1,8 +1,9 @@
 # model/TableModel.py
 
-from typing import Dict
+from typing import Dict, List
 from model.StorageModel import StorageModel
 from model.UnitModel import UnitModel
+from utils.metadata import MetaLoader
 from utils.helpers import Helpers
 
 
@@ -16,7 +17,7 @@ class Table:
         self.engine = engine
         self.name = name
         self.storage_units: Dict[str, StorageModel] = {}
-        self.sorted_columns: Dict[str, bool] = {}  # Track which columns are sorted
+        self.sorted_columns: List = []
 
     def add_unit(self, name: str, unit: StorageModel) -> None:
         self.storage_units[name] = unit
@@ -53,18 +54,25 @@ class Table:
     def load(self) -> "Table":
         try:
             column_data: Dict[str, list] = self.engine.read()
-            
-            # Columns that are physically sorted in this data
-            sorted_cols = ["month_num"]
+
+            meta = {}
+            db_path = getattr(self.engine, "db_path", None)
+            if db_path:
+                try:
+                    meta = MetaLoader.load(db_path)
+                except FileNotFoundError:
+                    meta = {}
+                except Exception:
+                    meta = {}
+
+            sorted_columns = meta.get("sorted_columns", [])
 
             for col_name, raw_values in column_data.items():
                 dtype = Helpers._infer_dtype(raw_values)
                 unit = UnitModel.create(col_name, dtype)
                 unit.data = [Helpers._safe_cast(v, dtype) for v in raw_values]
                 self.storage_units[col_name] = unit
-                
-                # Mark if column is sorted
-                self.sorted_columns[col_name] = col_name in sorted_cols
+                self.sorted_columns =  sorted_columns
 
             return self
 

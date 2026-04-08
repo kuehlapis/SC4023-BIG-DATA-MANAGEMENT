@@ -2,6 +2,8 @@
     "name": "ResalePrices",
     "path": "Database/ResalePrices",
     "engine": "column",
+    "sorted_columns": [
+    ],
     "columns": [
         "month",
         "town",

@@ -54,12 +54,15 @@ class ColumnFormat(BaseFormat):
             df =  self.sort_column("month_num", df)
             
             columns = df.columns.tolist()
+            sorted_columns = ["month_num"]
+            
             for col in columns:
                 file_path = os.path.join(self.column_path, f"{col}.col")
                 df[col].astype(str).to_csv(file_path, index=False, header=False)
 
             metadata.update({
-                "columns": columns
+                "columns": columns,
+                "sorted_columns": sorted_columns,
             })
             print(f"[ColumnFormat] Wrote {len(df)} rows × {len(columns)} columns → '{self.column_path}'")
         except Exception as e:
