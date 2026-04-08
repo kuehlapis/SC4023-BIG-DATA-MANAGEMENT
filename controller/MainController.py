@@ -31,7 +31,6 @@ class MainController:
     def run(self) -> None:
         while True:
             try:
-                self.db_controller.load_menu()
                 self.main.display_menu()
                 choice = self.validate_choice(self.main.get_input())
 
