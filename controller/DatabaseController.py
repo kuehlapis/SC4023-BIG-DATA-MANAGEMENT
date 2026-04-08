@@ -16,6 +16,26 @@ class DatabaseController:
     def __init__(self):
         self.db_view = DatabaseView()
 
+    def _resolve_db_name(self, databases: list[str], user_input: str) -> str:
+        """Accept either database name or 1-based index from the displayed list."""
+        if user_input is None:
+            raise ValueError("Database selection cannot be empty.")
+        s = str(user_input).strip()
+        if not s:
+            raise ValueError("Database selection cannot be empty.")
+
+        # Allow selecting by number shown in the list
+        if s.isdigit():
+            idx = int(s)
+            if 1 <= idx <= len(databases):
+                return databases[idx - 1]
+            raise ValueError(f"Invalid database number '{s}'. Please select 1 to {len(databases)}.")
+
+        # Otherwise treat as name
+        if s in databases:
+            return s
+        raise ValueError(f"Database '{s}' not found. Please enter a valid name or number.")
+
     def load_menu(self) -> list:
         databases = DatabaseModel.list_all_databases()
         if not databases:
@@ -63,7 +83,8 @@ class DatabaseController:
 
             self.db_view.display_databases(databases)
 
-            db_name = self.db_view.prompt_user("\nEnter database name")
+            db_sel = self.db_view.prompt_user("\nEnter database name or number")
+            db_name = self._resolve_db_name(databases, db_sel)
             matric_num = self.db_view.prompt_user("\nEnter matric number")
  
             # Load database
