@@ -14,6 +14,9 @@
         "floor_area_sqm",
         "flat_model",
         "lease_commence_date",
-        "resale_price"
+        "resale_price",
+        "psm_price",
+        "month_num",
+        "town_int"
     ]
 }
