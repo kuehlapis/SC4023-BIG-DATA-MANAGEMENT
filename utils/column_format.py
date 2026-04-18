@@ -4,7 +4,6 @@ import pandas as pd
 
 from utils.base_format import BaseFormat
 from model.StorageModel import StorageModel
-from utils.indexer import build_index, build_bpt
 
 
 
@@ -123,28 +122,9 @@ class ColumnFormat(BaseFormat):
                 # Preserve native numeric representations when writing.
                 df[col].to_csv(file_path, index=False, header=False)
 
-            # build per-column indexes (JSON sidecars)
-            indexes = {}
-            bpt_roots = {}
-            for col in columns:
-                try:
-                    idx = build_index(self.column_path, col)
-                    if idx:
-                        indexes[col] = f"{col}.idx.json"
-                except Exception:
-                    pass
-                try:
-                    root = build_bpt(self.column_path, col)
-                    if root:
-                        bpt_roots[col] = root
-                except Exception:
-                    pass
-
             metadata.update({
                 "columns": columns,
                 "sorted_columns": sorted_columns,
-                "indexes": indexes,
-                "bpt_roots": bpt_roots,
             })
             print(f"[ColumnFormat] Wrote {len(df)} rows × {len(columns)} columns → '{self.column_path}'")
         except Exception as e:
