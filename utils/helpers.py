@@ -59,10 +59,23 @@ class Helpers:
     def _safe_cast(value: str, dtype: type):
         """Cast value to dtype, fall back to str if it fails."""
         try:
+            if value is None:
+                return float("nan") if dtype == float else (None if dtype == int else "")
+
+            s = str(value).strip()
+            if s == "" or s.lower() == "nan":
+                if dtype == int:
+                    return None
+                if dtype == float:
+                    return float("nan")
+                return ""
+
             if dtype == int:
                 # handle "80.0" -> 80
-                return int(float(value))
-            return dtype(value)
+                return int(float(s))
+            if dtype == float:
+                return float(s)
+            return dtype(s)
         except (ValueError, TypeError):
             return value
 

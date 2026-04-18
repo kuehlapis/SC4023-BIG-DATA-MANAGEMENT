@@ -66,6 +66,8 @@ class Table:
                     meta = {}
 
             sorted_columns = meta.get("sorted_columns", [])
+            # expose metadata on the table for index usage
+            self.meta = meta
 
             for col_name, raw_values in column_data.items():
                 dtype = Helpers._infer_dtype(raw_values)

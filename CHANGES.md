@@ -185,6 +185,39 @@ def where_lte(self, column: str, threshold) -> "Query":
 - ✅ Falls back to linear scan if previous filters applied
 - ✅ No risk of incorrect results, only performance gains
 
+### 4. **utils/indexer.py**
+
+#### New: JSON indexer + B+ tree builder
+- **Added:** `build_index()` — block-level `.idx.json` with per-block `min`/`max` and optional `value_map` for low-cardinality columns.
+- **Added:** `build_bpt()` — serialises a B+ tree into JSON node files (`{col}.bpt.node.*.json`) and writes a root pointer `{col}.bpt.root.json`.
+- **Added:** `bpt_search_equal()` and `bpt_search_range()` — helpers to query the on-disk B+ tree without loading all data into memory.
+
+**Benefit:** Provides an on-disk, text-only index usable before any query runs; simple to inspect and debug.
+
+### 5. **utils/column_format.py**
+
+#### Build indexes at write time
+- **Changed:** After writing `{col}.col` files the writer now calls `build_index()` and `build_bpt()`.
+- **Changed:** `db.meta.json` now receives two new keys: `indexes` (maps columns → `{col}.idx.json`) and `bpt_roots` (maps columns → `{col}.bpt.root.json`).
+
+**Benefit:** Index files exist immediately post-write so query paths can use indexes without extra preparation.
+
+### 6. **model/TableModel.py**
+
+#### Expose metadata to higher layers
+- **Changed:** `Table.load()` now attaches the loaded metadata dict to `table.meta`.
+
+**Benefit:** `QueryModel` and other components can discover index sidecars and B+ root pointers via `table.meta`.
+
+### 7. **model/QueryModel.py**
+
+#### Use B+ tree indexes for fast lookup and ranges
+- **Changed:** `where_eq()` / `where_in()` now attempt `bpt_search_equal()` lookups when a B+ root exists and intersect returned row ids with the current candidate set.
+- **Changed:** `where_gte()` / `where_lte()` now attempt `bpt_search_range()` to collect matching row ids from the B+ tree before intersecting with current candidates.
+- **Behavior:** All index-accelerated paths **fall back** to binary-search or linear-scan logic when no index exists or an error occurs.
+
+**Benefit:** Range/equality queries avoid full column scans and use pre-built index structures for significant read-time savings.
+
 ---
 
 ## Performance Impact Summary
@@ -321,3 +354,32 @@ All changes validated:
 - **Memory Usage:** **100-200MB peak RAM saved** (80-90% reduction per aggregation)
 - **Real-world impact:** Query execution from ~4+ seconds → **~0.1 seconds** 
 - **Estimated total speedup on your workload:** **30-50x overall**
+
+## New: On-disk JSON B+‑tree indexes (April 18, 2026)
+
+### Summary
+- Implemented a text-only, on-disk B+ tree index and lightweight block/value indexes built at write time. Index files are JSON sidecars placed next to `.col` files so indexes exist before any query runs.
+
+### Files added/changed
+- `utils/indexer.py` — new: index builder/loader + B+ tree node writer and search helpers (`bpt_search_equal`, `bpt_search_range`).
+- `utils/column_format.py` — updated: after writing `.col` files the writer now builds `.idx.json` (block/value maps) and B+ tree node files; records pointers in `db.meta.json` under `indexes` and `bpt_roots`.
+- `model/TableModel.py` — updated: attaches loaded metadata to `table.meta` so query layer can find index roots.
+- `model/QueryModel.py` — updated: uses B+ tree exact and range searches when a B+ root exists, falling back to prior in-memory/bisect logic.
+
+### How it works (short)
+- At write time the engine writes `{col}.col` then:
+    - `build_index()` produces `{col}.idx.json` containing per-block `min/max` and a `value_map` for low-cardinality columns.
+    - `build_bpt()` produces JSON node files (`{col}.bpt.node.*.json`) and a root pointer `{col}.bpt.root.json`.
+- `db.meta.json` records the index filenames so `Table.load()` exposes them via `table.meta`.
+- On query, `Query` checks `table.meta['bpt_roots']` and uses `bpt_search_equal`/`bpt_search_range` to retrieve matching row positions and intersect them with the current candidate set — avoiding a full column scan.
+
+### Rationale & constraints
+- Indexes are human-readable JSON (no binary formats) to comply with project constraints.
+- Building indexes happens at write time so they are available before queries run.
+- Tradeoffs: JSON node files are larger/slower than binary, but simple to debug and satisfy the 'no-binary' rule.
+
+### Next suggested steps
+- Add optional lazy column loading to avoid eager-scanning all columns on `Query` creation.
+- Add bitmap indexes for extreme low-cardinality columns (space-efficient `.bm` sidecars).
+
+**Date:** April 18, 2026

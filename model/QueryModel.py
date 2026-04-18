@@ -1,7 +1,9 @@
 # model/QueryModel.py
 
 import bisect
+import os
 from model.TableModel import Table
+from utils.indexer import load_index, bpt_search_equal, bpt_search_range
 
 
 class Query:
@@ -13,6 +15,17 @@ class Query:
             name: unit.scan()
             for name, unit in table.storage_units.items()
         }
+
+        # DB path and B+ tree roots from table metadata (if available)
+        self._db_path = None
+        self._bpt_roots = {}
+        try:
+            self._db_path = getattr(self.table.engine, 'db_path', None) or getattr(self.table.engine, 'column_path', None)
+            meta = getattr(self.table, 'meta', {}) or {}
+            self._bpt_roots = meta.get('bpt_roots', {})
+        except Exception:
+            self._db_path = None
+            self._bpt_roots = {}
 
         # Initialize all row indexes
         first_column = next(iter(self._column_cache.values()))
@@ -44,6 +57,19 @@ class Query:
 
     def where_eq(self, column: str, value) -> "Query":
         col_data = self._column_cache[column]
+
+        # Fast path: B+ tree exact lookup
+        try:
+            if self._db_path and column in self._bpt_roots:
+                root = self._bpt_roots.get(column)
+                rows = bpt_search_equal(self._db_path, root, str(value))
+                rows_set = set(rows)
+                self._selected_indexes = [i for i in self._selected_indexes if i in rows_set]
+                return self
+        except Exception:
+            pass
+
+        # Fallback to in-memory scan
         self._selected_indexes = [
             i for i in self._selected_indexes
             if col_data[i] == value
@@ -53,6 +79,18 @@ class Query:
     def where_in(self, column: str, values) -> "Query":
         col_data = self._column_cache[column]
         value_set = set(values)
+        # Fast path: B+ tree value_map union via equal searches
+        try:
+            if self._db_path and column in self._bpt_roots:
+                root = self._bpt_roots.get(column)
+                rows_set = set()
+                for v in value_set:
+                    rows_set.update(bpt_search_equal(self._db_path, root, str(v)))
+                self._selected_indexes = [i for i in self._selected_indexes if i in rows_set]
+                return self
+        except Exception:
+            pass
+
         self._selected_indexes = [
             i for i in self._selected_indexes
             if col_data[i] in value_set
@@ -61,7 +99,17 @@ class Query:
 
     def where_gte(self, column: str, threshold) -> "Query":
         col_data = self._column_cache[column]
-        
+        # Fast path: B+ tree range lookup if available
+        try:
+            if self._db_path and column in self._bpt_roots:
+                root = self._bpt_roots.get(column)
+                rows = bpt_search_range(self._db_path, root, str(threshold), None)
+                rows_set = set(rows)
+                self._selected_indexes = [i for i in self._selected_indexes if i in rows_set]
+                return self
+        except Exception:
+            pass
+
         if column in self.table.sorted_columns and len(self._selected_indexes) == len(col_data):
             print("using binary search for where_gte")
             start_idx = bisect.bisect_left(col_data, threshold)
@@ -76,7 +124,17 @@ class Query:
 
     def where_lte(self, column: str, threshold) -> "Query":
         col_data = self._column_cache[column]
-        
+        # Fast path: B+ tree range lookup if available
+        try:
+            if self._db_path and column in self._bpt_roots:
+                root = self._bpt_roots.get(column)
+                rows = bpt_search_range(self._db_path, root, None, str(threshold))
+                rows_set = set(rows)
+                self._selected_indexes = [i for i in self._selected_indexes if i in rows_set]
+                return self
+        except Exception:
+            pass
+
         if column in self.table.sorted_columns and len(self._selected_indexes) == len(col_data):
             print("using binary search for where_lte")
             end_idx = bisect.bisect_right(col_data, threshold)

@@ -39,3 +39,18 @@ class BaseFormat(ABC):
         """Compress 'town' by mapping town names to integers."""
         pass
 
+    @abstractmethod
+    def encode_flat_type(self) -> None:
+        """Encode 'flat_type' by mapping flat types to integers."""
+        pass
+
+    @abstractmethod
+    def encode_storey_range(self) -> None:
+        """Encode 'storey_range' by mapping storey ranges to integers."""
+        pass
+
+    @abstractmethod
+    def encode_flat_model(self) -> None:
+        """Encode 'flat_model' by mapping flat models to integers."""
+        pass
+
