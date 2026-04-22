@@ -5,6 +5,7 @@ from model.StorageModel import StorageModel
 from model.UnitModel import UnitModel
 from utils.metadata import MetaLoader
 from utils.helpers import Helpers
+from optimization.BitmapIndex import BitmapIndex
 
 
 class Table:
@@ -18,6 +19,10 @@ class Table:
         self.name = name
         self.storage_units: Dict[str, StorageModel] = {}
         self.sorted_columns: List = []
+        # bitmap_indexes holds raw base64 strings loaded from metadata.
+        # Use `get_bitmap(col, val)` to obtain a decoded BitmapIndex (cached in-memory).
+        self.bitmap_indexes: Dict[str, Dict[str, str]] = {}
+        self._bitmap_cache: Dict[str, Dict[str, BitmapIndex]] = {}
 
     def add_unit(self, name: str, unit: StorageModel) -> None:
         self.storage_units[name] = unit
@@ -73,6 +78,19 @@ class Table:
                 unit.data = [Helpers._safe_cast(v, dtype) for v in raw_values]
                 self.storage_units[col_name] = unit
                 self.sorted_columns =  sorted_columns
+
+            # Load bitmap indexes metadata (store base64 strings; decode lazily)
+            bitmap_meta = meta.get("bitmap_indexes", {})
+            for col, value_map in bitmap_meta.items():
+                self.bitmap_indexes[col] = {}
+                self._bitmap_cache[col] = {}
+                for val, b64 in value_map.items():
+                    try:
+                        # keep the serialized form; decoding happens on demand
+                        self.bitmap_indexes[col][val] = b64
+                    except Exception:
+                        # Ignore corrupted or incompatible bitmap entries
+                        continue
 
             return self
 

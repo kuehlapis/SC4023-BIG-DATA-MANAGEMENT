@@ -4,6 +4,7 @@ import pandas as pd
 
 from utils.base_format import BaseFormat
 from model.StorageModel import StorageModel
+from optimization.BitmapIndex import BitmapIndex
 
 
 
@@ -117,6 +118,35 @@ class ColumnFormat(BaseFormat):
             columns = df.columns.tolist()
             sorted_columns = ["month_num"]
             
+            # Selective bitmap indexes: only for low-cardinality categorical columns
+            # Avoid bitmaps for: numeric columns, high-cardinality columns, range-query columns
+            BITMAP_CANDIDATES = {
+                "town": 26,           # Town names (26 towns)
+                "flat_type": 7,       # Flat types (1 ROOM to EXECUTIVE)
+                "storey_range": 17,   # Storey ranges (01 TO 03 to 49 TO 51)
+                "flat_model": 21,     # Flat models (2-room, 3Gen, etc.)
+            }
+            
+            bitmap_indexes = {}
+            for col, expected_cardinality in BITMAP_CANDIDATES.items():
+                if col not in columns:
+                    continue
+                try:
+                    vals = df[col].tolist()
+                    unique_vals = pd.Series(vals).dropna().unique().tolist()
+                    # Only create bitmap if actual cardinality is reasonable
+                    if 0 < len(unique_vals) <= expected_cardinality * 1.2:
+                        bitmap_indexes[col] = {}
+                        for uv in unique_vals:
+                            bi = BitmapIndex.from_values(vals, uv)
+                            # store using string key to be JSON-serializable
+                            bitmap_indexes[col][str(uv)] = bi.to_base64()
+                        print(f"[ColumnFormat] Created bitmap index for '{col}' ({len(unique_vals)} unique values)")
+                except Exception as e:
+                    print(f"Warning: Could not create bitmap for '{col}': {e}")
+                    # skip columns that can't be processed
+                    continue
+            
             for col in columns:
                 file_path = os.path.join(self.column_path, f"{col}.col")
                 # Preserve native numeric representations when writing.
@@ -125,6 +155,7 @@ class ColumnFormat(BaseFormat):
             metadata.update({
                 "columns": columns,
                 "sorted_columns": sorted_columns,
+                "bitmap_indexes": bitmap_indexes,
             })
             print(f"[ColumnFormat] Wrote {len(df)} rows × {len(columns)} columns → '{self.column_path}'")
         except Exception as e:

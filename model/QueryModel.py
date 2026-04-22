@@ -1,8 +1,8 @@
 # model/QueryModel.py
 
 import bisect
+from optimization.BitmapIndex import BitmapIndex
 from model.TableModel import Table
-
 
 class Query:
     def __init__(self, table: Table):
@@ -17,6 +17,8 @@ class Query:
         # Initialize all row indexes
         first_column = next(iter(self._column_cache.values()))
         self._selected_indexes = list(range(len(first_column)))
+        # Lazy bitmap-backed selection (BitmapIndex) when available
+        self._bitmap_selection: BitmapIndex | None = None
 
     def clone(self) -> "Query":
         """Create a lightweight copy for reuse."""
@@ -24,13 +26,22 @@ class Query:
         new_q.table = self.table
         new_q._column_cache = self._column_cache
         new_q._selected_indexes = self._selected_indexes.copy()
+        new_q._bitmap_selection = self._bitmap_selection
         return new_q
 
     def select(self, indexes=None):
         if indexes is not None:
+            # explicit select overrides any bitmap selection
+            self._bitmap_selection = None
             self._selected_indexes = [
                 i for i in indexes if i in self._selected_indexes
             ]
+            return self._selected_indexes
+
+        # materialize bitmap selection if present
+        if self._bitmap_selection is not None:
+            self._selected_indexes = self._bitmap_selection.get_positions()
+            self._bitmap_selection = None
         return self._selected_indexes
 
     def where(self, column: str, predicate) -> "Query":
@@ -44,6 +55,40 @@ class Query:
 
     def where_eq(self, column: str, value) -> "Query":
         col_data = self._column_cache[column]
+        # Try bitmap-backed lookup first
+        bm_map = getattr(self.table, "bitmap_indexes", {})
+        col_bms = bm_map.get(column)
+        if col_bms is not None:
+            # find metadata key for the requested value (metadata keys are strings)
+            value_key = None
+            if str(value) in col_bms:
+                value_key = str(value)
+            elif value in col_bms:
+                value_key = value
+
+            b = self.table.get_bitmap(column, value_key) if value_key is not None else None
+            if b is not None and getattr(b, "length", None) == len(col_data):
+                print("using bitmap for where_eq on column", column)
+                # Lazy bitmap intersection: adopt or AND without materializing
+                if len(self._selected_indexes) == len(col_data) and self._bitmap_selection is None:
+                    # no prior restrictions, adopt bitmap directly
+                    self._bitmap_selection = b
+                    return self
+
+                if self._bitmap_selection is not None:
+                    # intersect with existing bitmap selection
+                    self._bitmap_selection = self._bitmap_selection.and_(b)
+                    return self
+
+                # Convert current selection to bitmap and intersect
+                bits = 0
+                for i in self._selected_indexes:
+                    bits |= (1 << i)
+                cur_b = BitmapIndex(bits, len(col_data))
+                self._bitmap_selection = cur_b.and_(b)
+                return self
+
+        # Fallback to linear scan
         self._selected_indexes = [
             i for i in self._selected_indexes
             if col_data[i] == value
@@ -52,6 +97,44 @@ class Query:
 
     def where_in(self, column: str, values) -> "Query":
         col_data = self._column_cache[column]
+        # Try bitmap-backed lookup first
+        bm_map = getattr(self.table, "bitmap_indexes", {})
+        col_bms = bm_map.get(column)
+        if col_bms is not None:
+            # combine bitmaps for the requested values
+            combined = None
+            valid = True
+            for v in values:
+                # find matching metadata key
+                v_key = str(v) if str(v) in col_bms else (v if v in col_bms else None)
+                if v_key is None:
+                    # missing bitmap for this value — skip
+                    continue
+                b = self.table.get_bitmap(column, v_key)
+                if b is not None:
+                    combined = b if combined is None else combined.or_(b)
+                else:
+                    continue
+
+            if combined is not None and getattr(combined, "length", None) == len(col_data):
+                print("using bitmap for where_in on column", column)
+                # Lazy bitmap intersection similar to where_eq
+                if len(self._selected_indexes) == len(col_data) and self._bitmap_selection is None:
+                    self._bitmap_selection = combined
+                    return self
+
+                if self._bitmap_selection is not None:
+                    self._bitmap_selection = self._bitmap_selection.and_(combined)
+                    return self
+
+                bits = 0
+                for i in self._selected_indexes:
+                    bits |= (1 << i)
+                cur_b = BitmapIndex(bits, len(col_data))
+                self._bitmap_selection = cur_b.and_(combined)
+                return self
+
+        # Fallback to linear scan
         value_set = set(values)
         self._selected_indexes = [
             i for i in self._selected_indexes
