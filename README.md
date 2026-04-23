@@ -481,6 +481,55 @@ flats = area_query.fetch()
 
 ## Usage
 
+### Running the application
+
+- **Python requirement:** Python 3.12 or newer.
+- **Create & activate a virtual environment (recommended):**
+- Windows (PowerShell):
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+- Windows (cmd):
+
+```cmd
+python -m venv .venv
+.venv\Scripts\activate.bat
+```
+
+- macOS / Linux:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+- **Install dependencies:**
+- If a `requirements.txt` file exists:
+
+```bash
+pip install -r requirements.txt
+```
+
+- Or install the project in editable mode using the `pyproject.toml`:
+
+```bash
+pip install -e .
+```
+
+- **Run the program:**
+
+```bash
+python main.py
+```
+
+- **Menu flow:**
+  - Select `1` to query an existing database, or `2` to create a new database.
+  - At the database prompt, press Enter to default to `szm` if that database is present.
+  - Enter your matric number when prompted to run the scan. Results are written to `result/ScanResult_<matric>.csv`.
+
 ### Create Database
 
 ```bash
@@ -496,7 +545,7 @@ python main.py
 ```bash
 python main.py
 # Select option 1: Select Database
-# Enter database name or number: ResalePrices
+# Enter database name or number (press Enter for default 'szm'): ResalePrices
 # Enter matric number: A1234567X
 ```
 
@@ -573,12 +622,19 @@ dependencies = [
 
 ### Query Performance
 
-| Query Type                       | Execution Time | Optimization Used              |
-| -------------------------------- | -------------- | ------------------------------ |
-| Town filter (3 towns)            | ~50 ms         | Integer set lookup             |
-| Month range filter               | ~10 ms         | Binary search on sorted column |
-| MIN aggregation                  | ~20 ms         | Generator-based scan           |
-| Full analysis (8×71 iterations) | ~5-10 s        | Query cloning + caching        |
+Representative timings on a ~300k-record dataset (actual times vary by hardware, dataset, and cache warmness):
+
+| Query Type | Typical Execution Time (representative) | Optimizations Applied |
+| ---------- | ----------------------------------------: | --------------------- |
+| Single-column scan (e.g., `psm_price`) | ~5–50 ms | Column-oriented `.col` layout; selective column loading; sequential file I/O; column cache |
+| Town filter — `where_in('town_int', {...})` | ~20–200 ms | Integer encoding (`town_int`); O(1) set membership; predicate pushdown; selective column loading; column cache |
+| Month range filter — `where_gte('month_num', value)` (sorted) | ~1–20 ms | Binary search on sorted column (O(log n)); sorted-column detection; predicate pushdown; column cache |
+| MIN aggregation (on filtered indexes) | ~5–50 ms | Generator-based aggregation (no materialization); selective column loading; index-based access |
+| Filter + aggregate (town + month + floor_area) | ~20–500 ms | Predicate pushdown; selective column loading; shared column cache; generator aggregations; binary-search where applicable |
+| Indexed row fetch (constructing rows from selected indexes) | ~5–100 ms | Indexed row access using selected indexes; column cache; selective loading |
+| Full analysis (8 × 71 area iterations, finding min `psm_price`) | ~5–15 s | Query cloning & reuse; shared column cache; predicate pushdown; binary search on `month_num`; generator-based aggregations; early pruning when no candidates remain |
+| Algorithmic improvement for sorted ranges | O(log n) vs O(n) | Binary-search on sorted columns reduces complexity; practical 10×–1000× speedups for large datasets |
+| Cold full-scan (no cache, many columns) | hundreds ms → seconds | Disk-bound I/O; encoding/compression reduces bytes read; selective loading + column cache mitigate cost |
 
 ---
 

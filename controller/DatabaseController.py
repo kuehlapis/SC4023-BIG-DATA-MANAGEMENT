@@ -83,8 +83,18 @@ class DatabaseController:
 
             self.db_view.display_databases(databases)
 
-            db_sel = self.db_view.prompt_user("\nEnter database name or number")
-            db_name = self._resolve_db_name(databases, db_sel)
+            db_sel = self.db_view.prompt_user("\nEnter database name or number (press Enter for default 'szm')")
+
+            # If the user presses Enter/inputs nothing, default to 'szm' when available
+            if not db_sel:
+                default_db = "szm"
+                if default_db in databases:
+                    db_name = default_db
+                else:
+                    self.db_view.display_error(f"Default database '{default_db}' not found. Please select a database.")
+                    return
+            else:
+                db_name = self._resolve_db_name(databases, db_sel)
             matric_num = self.db_view.prompt_user("\nEnter matric number")
  
             # Load database
