@@ -56,11 +56,9 @@ class ZoneMap:
                 if blk["max"] >= threshold:
                     lo = blk["start"]
                     hi = blk["end"]
-                    # use bisect on the relevant slice to find precise position
                     idx = bisect.bisect_left(col_values, threshold, lo, hi)
                     return idx
             except Exception:
-                # Fallback: compare as strings
                 if str(blk["max"]) >= str(threshold):
                     lo = blk["start"]
                     hi = blk["end"]
