@@ -372,7 +372,6 @@ return min((col_data[i] for i in self._selected_indexes), default=None)
 ```
 SC4023-BIG-DATA-MANAGEMENT/
 ├── main.py                     # Application entry point
-├── format_column.py            # Legacy column format utility
 ├── pyproject.toml              # Project dependencies
 │
 ├── controller/
@@ -404,17 +403,17 @@ SC4023-BIG-DATA-MANAGEMENT/
 │   └── ResalePricesSingapore.csv  # Source dataset
 │
 ├── Database/
-│   ├── ResalePrices/           # Column-oriented database
+│   ├── szm/                    # Scan by Zone Map + Binary Search
 │   │   ├── *.col               # Column files
 │   │   └── db.meta.json        # Schema metadata
 │   ├── sortmth/                # Sorted by month_num
-│   └── test/                   # Test database
+│   └── linear                  # linear Scan
+|   └── zonemap                 # Scan by Zone Map
+|   └── bitmap                  # Bitmap Indexing on Town Int
+|
 │
 ├── result/
-│   └── ScanResult_*.csv        # Query output files
-│
-└── tests/
-    └── test.py                 # Test suite
+   └── ScanResult_*.csv        # Query output files
 ```
 
 ---
