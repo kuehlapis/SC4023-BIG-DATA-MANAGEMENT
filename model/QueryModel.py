@@ -144,32 +144,170 @@ class Query:
 
     def where_gte(self, column: str, threshold) -> "Query":
         col_data = self._column_cache[column]
+        # Materialize any lazy bitmap-backed selection so we operate on the
+        # actual filtered index set rather than the implicit full-range.
+        if self._bitmap_selection is not None:
+            self._selected_indexes = self._bitmap_selection.get_positions()
+            self._bitmap_selection = None
+
+        # HYBRID APPROACH: ZoneMap → Binary Search
+        # Use zonemap to find qualifying block, then binary search within block
+        if column in getattr(self.table, "zonemaps", {}) and column in self.table.sorted_columns:
+            try:
+                zm = self.table.zonemaps[column]
+                # Step 1: Find first block with max >= threshold
+                for block in zm.blocks:
+                    try:
+                        if block["max"] >= threshold:
+                            block_start = block["start"]
+                            block_end = block["end"]
+                            
+                            # Step 2: Binary search within this block only
+                            try:
+                                local_idx = bisect.bisect_left(col_data, threshold, lo=block_start, hi=block_end)
+                                # adjust to be relative to the block
+                                local_idx = local_idx - block_start
+                            except TypeError:
+                                slice_strs = [str(x) for x in col_data[block_start:block_end]]
+                                local_idx = bisect.bisect_left(slice_strs, str(threshold))
+                            
+                            start_idx = block_start + local_idx
+                            print(f"using zonemap+bisect for where_gte on {column}")
+                            
+                            if len(self._selected_indexes) == len(col_data):
+                                self._selected_indexes = list(range(start_idx, len(col_data)))
+                            else:
+                                self._selected_indexes = [i for i in self._selected_indexes if i >= start_idx]
+                            return self
+                    except Exception:
+                        continue
+            except Exception:
+                pass
         
-        if column in self.table.sorted_columns and len(self._selected_indexes) == len(col_data):
-            print("using binary search for where_gte")
-            start_idx = bisect.bisect_left(col_data, threshold)
-            self._selected_indexes = list(range(start_idx, len(col_data)))
-        else:
-            # Fallback to linear scan
-            self._selected_indexes = [
-                i for i in self._selected_indexes
-                if col_data[i] >= threshold
-            ]
+        # Fallback: binary search on full column (if sorted but no zonemap)
+        if column in self.table.sorted_columns:
+            try:
+                start_idx = bisect.bisect_left(col_data, threshold)
+            except TypeError:
+                start_idx = bisect.bisect_left([str(x) for x in col_data], str(threshold))
+            except Exception:
+                start_idx = None
+
+            if start_idx is not None:
+                print("using binary search for where_gte on column", column)
+                if len(self._selected_indexes) == len(col_data):
+                    self._selected_indexes = list(range(start_idx, len(col_data)))
+                else:
+                    self._selected_indexes = [i for i in self._selected_indexes if i >= start_idx]
+                return self
+
+        # Fallback: zonemap only (if not sorted)
+        if column in getattr(self.table, "zonemaps", {}):
+            try:
+                zm = self.table.zonemaps[column]
+                start_idx = zm.find_start(threshold, col_data)
+                print("using zonemap for where_gte on column", column)
+                if len(self._selected_indexes) == len(col_data):
+                    self._selected_indexes = list(range(start_idx, len(col_data)))
+                else:
+                    self._selected_indexes = [i for i in self._selected_indexes if i >= start_idx]
+                return self
+            except Exception:
+                pass
+
+        # Final fallback: linear scan
+        self._selected_indexes = [
+            i for i in self._selected_indexes
+            if col_data[i] >= threshold
+        ]
         return self
 
     def where_lte(self, column: str, threshold) -> "Query":
         col_data = self._column_cache[column]
-        
-        if column in self.table.sorted_columns and len(self._selected_indexes) == len(col_data):
-            print("using binary search for where_lte")
-            end_idx = bisect.bisect_right(col_data, threshold)
-            self._selected_indexes = list(range(end_idx))
-        else:
-            # Fallback to linear scan
-            self._selected_indexes = [
-                i for i in self._selected_indexes
-                if col_data[i] <= threshold
-            ]
+        # Materialize any lazy bitmap-backed selection first
+        if self._bitmap_selection is not None:
+            self._selected_indexes = self._bitmap_selection.get_positions()
+            self._bitmap_selection = None
+        # HYBRID APPROACH: ZoneMap -> Binary Search to find end index
+        if column in getattr(self.table, "zonemaps", {}) and column in self.table.sorted_columns:
+            try:
+                zm = self.table.zonemaps[column]
+                last_block = None
+                for block in zm.blocks:
+                    try:
+                        if block["min"] > threshold:
+                            break
+                        last_block = block
+                    except Exception:
+                        continue
+
+                if last_block is not None:
+                    block_start = last_block["start"]
+                    block_end = last_block["end"]
+                    try:
+                        local_idx = bisect.bisect_right(col_data, threshold, lo=block_start, hi=block_end)
+                        # local_idx from bisect is absolute index; convert to offset within block
+                        local_idx = local_idx - block_start
+                    except TypeError:
+                        slice_strs = [str(x) for x in col_data[block_start:block_end]]
+                        local_idx = bisect.bisect_right(slice_strs, str(threshold))
+
+                    end_idx = block_start + local_idx
+                    print(f"using zonemap+bisect for where_lte on {column}")
+                    if len(self._selected_indexes) == len(col_data):
+                        self._selected_indexes = list(range(end_idx))
+                    else:
+                        self._selected_indexes = [i for i in self._selected_indexes if i < end_idx]
+                    return self
+            except Exception:
+                pass
+
+        # Fallback: binary search on full column (if sorted)
+        if column in self.table.sorted_columns:
+            try:
+                end_idx = bisect.bisect_right(col_data, threshold)
+            except TypeError:
+                end_idx = bisect.bisect_right([str(x) for x in col_data], str(threshold))
+            except Exception:
+                end_idx = None
+
+            if end_idx is not None:
+                print("using binary search for where_lte on column", column)
+                if len(self._selected_indexes) == len(col_data):
+                    self._selected_indexes = list(range(end_idx))
+                else:
+                    self._selected_indexes = [i for i in self._selected_indexes if i < end_idx]
+                return self
+
+        # Fallback: zonemap only (if not sorted) - find first block with min > threshold
+        if column in getattr(self.table, "zonemaps", {}):
+            try:
+                zm = self.table.zonemaps[column]
+                end_idx = None
+                for block in zm.blocks:
+                    try:
+                        if block["min"] > threshold:
+                            end_idx = block["start"]
+                            break
+                    except Exception:
+                        continue
+                if end_idx is None:
+                    end_idx = len(col_data)
+
+                print(f"using zonemap for where_lte on {column}")
+                if len(self._selected_indexes) == len(col_data):
+                    self._selected_indexes = list(range(end_idx))
+                else:
+                    self._selected_indexes = [i for i in self._selected_indexes if i < end_idx]
+                return self
+            except Exception:
+                pass
+
+        # Otherwise filter the current selection in-place
+        self._selected_indexes = [
+            i for i in self._selected_indexes
+            if col_data[i] <= threshold
+        ]
         return self
 
     def fetch(self) -> list[dict]:

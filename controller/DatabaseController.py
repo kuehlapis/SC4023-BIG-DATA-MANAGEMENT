@@ -106,24 +106,18 @@ class DatabaseController:
                 start = time.time()
                 base_query = Query(table)
 
-                
-                # base_query.where(
+                # base_query.where_in(
                 #     "town",
-                #     lambda x, towns=valid_towns: str(x).strip().upper() in towns
+                #     valid_towns
                 # )
-
-                # Faster than lambda-based predicate for repeated filtering
-                # test whether sorting by town or binary search month num is faster"
 
                 base_query.where_in("town_int", valid_towns_int)
 
                 print(f"Number of records after town filter: {len(base_query.select())}")
 
-                
                 base_query.where_gte("month_num", start_yr_mth)
 
                 print(f"Number of records after month filter: {len(base_query.select())}")
-
 
                 for x in range(1, 9):
                     end_month = Helpers.add_months(start_yr_mth, int(x))

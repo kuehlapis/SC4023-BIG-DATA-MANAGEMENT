@@ -5,6 +5,7 @@ import pandas as pd
 from utils.base_format import BaseFormat
 from model.StorageModel import StorageModel
 from optimization.BitmapIndex import BitmapIndex
+from optimization.ZoneMap import ZoneMap
 
 
 
@@ -116,16 +117,19 @@ class ColumnFormat(BaseFormat):
             df = self.sort_column("month_num", df)
             
             columns = df.columns.tolist()
-            sorted_columns = ["month_num"]
+            sorted_columns = [
+                # "month_num",
+            ]
             
-            # Selective bitmap indexes: only for low-cardinality categorical columns
-            # Avoid bitmaps for: numeric columns, high-cardinality columns, range-query columns
             BITMAP_CANDIDATES = {
-                "town": 26,           # Town names (26 towns)
-                "flat_type": 7,       # Flat types (1 ROOM to EXECUTIVE)
-                "storey_range": 17,   # Storey ranges (01 TO 03 to 49 TO 51)
-                "flat_model": 21,     # Flat models (2-room, 3Gen, etc.)
+                "town_int": 26,           # Town integers (26 towns)
             }
+
+            ZONEMAP_CANDIDATES = [
+                # "month_num",
+                # "floor_area_sqm", 
+                # "psm_price"
+            ]
             
             bitmap_indexes = {}
             for col, expected_cardinality in BITMAP_CANDIDATES.items():
@@ -152,10 +156,23 @@ class ColumnFormat(BaseFormat):
                 # Preserve native numeric representations when writing.
                 df[col].to_csv(file_path, index=False, header=False)
 
+            zonemaps = {}
+            try:
+                # combine sorted columns and explicit candidates (avoid duplicates)
+                for sc in ZONEMAP_CANDIDATES:
+                    if sc in columns:
+                        vals = df[sc].tolist()
+                        zm = ZoneMap.build(vals, block_size=1024)
+                        zonemaps[sc] = zm.to_dict()
+                        print(f"[ColumnFormat] Created zonemap for '{sc}' with {len(zm.blocks)} blocks")
+            except Exception as e:
+                print(f"Warning: Could not create zonemap: {e}")
+
             metadata.update({
                 "columns": columns,
                 "sorted_columns": sorted_columns,
                 "bitmap_indexes": bitmap_indexes,
+                "zonemaps": zonemaps,
             })
             print(f"[ColumnFormat] Wrote {len(df)} rows × {len(columns)} columns → '{self.column_path}'")
         except Exception as e:
