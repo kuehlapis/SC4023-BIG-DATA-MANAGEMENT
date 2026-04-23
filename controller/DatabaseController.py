@@ -110,7 +110,7 @@ class DatabaseController:
                 #     "town",
                 #     valid_towns
                 # )
-
+                
                 base_query.where_in("town_int", valid_towns_int)
 
                 print(f"Number of records after town filter: {len(base_query.select())}")
